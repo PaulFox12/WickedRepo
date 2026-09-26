@@ -228,6 +228,7 @@ namespace wiAudio
 		XAUDIO2_BUFFER buffer = {};
 		uint32_t totalSamples = 0;
 		MyVoiceCallback* pCallback = nullptr;
+		float userFrequencyRatio = 1.0f; // combined with doppler in Update3D
 
 		~SoundInstanceInternal()
 		{
@@ -491,6 +492,7 @@ namespace wiAudio
 			auto instanceinternal = to_internal(instance);
 			if (instanceinternal && instanceinternal->sourceVoice)
 			{
+				instanceinternal->userFrequencyRatio = frequencyRatio;
 				HRESULT hr = instanceinternal->sourceVoice->SetFrequencyRatio(frequencyRatio, XAUDIO2_COMMIT_NOW);
 				assert(SUCCEEDED(hr));
 			}
@@ -767,7 +769,10 @@ namespace wiAudio
 
 			HRESULT hr;
 
-			hr = instanceinternal->sourceVoice->SetFrequencyRatio(settings.DopplerFactor);
+			// doppler scales the SetFrequencyRatio pitch, capped at the voice's max ratio
+			float frequencyRatio = settings.DopplerFactor * instanceinternal->userFrequencyRatio;
+			if (frequencyRatio > XAUDIO2_DEFAULT_FREQ_RATIO) frequencyRatio = XAUDIO2_DEFAULT_FREQ_RATIO;
+			hr = instanceinternal->sourceVoice->SetFrequencyRatio(frequencyRatio);
 			assert(SUCCEEDED(hr));
 
 			hr = instanceinternal->sourceVoice->SetOutputMatrix(
