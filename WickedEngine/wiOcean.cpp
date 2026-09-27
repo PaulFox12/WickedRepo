@@ -31,6 +31,10 @@ namespace wiOcean_Internal
 
 	wiFFTGenerator::CSFFT512x512_Plan m_fft_plan;
 
+	// terrain under the water, set by the application (SetShoreHeightMap)
+	const Texture* shoreHeightMap = nullptr;
+	XMFLOAT4 shoreMapParams = XMFLOAT4(0, 0, 0, 0);
+
 
 	void LoadShaders()
 	{
@@ -383,12 +387,18 @@ void wiOcean::Render(const CameraComponent& camera, const OceanParameters& param
 	cb.xOceanFogMax = params.fogMaxDist;
 	cb.xOceanFogMinAmount = params.fogMinAmount;
 	cb.xOceanSurfaceDisplacementTolerance = std::max(1.0f, params.surfaceDisplacementTolerance);
+	const bool bShoreMap = shoreHeightMap != nullptr && shoreHeightMap->IsValid();
+	cb.xOceanShoreMap = bShoreMap ? shoreMapParams : XMFLOAT4(0, 0, 0, 0);
 
 	device->UpdateBuffer(&shadingCB, &cb, cmd);
 
 	device->BindConstantBuffer(VS, &shadingCB, CB_GETBINDSLOT(Ocean_RenderCB), cmd);
 	device->BindConstantBuffer(PS, &shadingCB, CB_GETBINDSLOT(Ocean_RenderCB), cmd);
 
+	if (bShoreMap)
+	{
+		device->BindResource(VS, shoreHeightMap, TEXSLOT_ONDEMAND2, cmd);
+	}
 	device->BindResource(VS, &displacementMap, TEXSLOT_ONDEMAND0, cmd);
 	device->BindResource(PS, &gradientMap, TEXSLOT_ONDEMAND1, cmd);
 
@@ -397,6 +407,12 @@ void wiOcean::Render(const CameraComponent& camera, const OceanParameters& param
 	device->EventEnd(cmd);
 }
 
+
+void wiOcean::SetShoreHeightMap(const Texture* heightMap, float minX, float minZ, float size, float shoreDepth)
+{
+	shoreHeightMap = heightMap;
+	shoreMapParams = XMFLOAT4(minX, minZ, heightMap ? size : 0.0f, std::max(1.0f, shoreDepth));
+}
 
 void wiOcean::Initialize()
 {

@@ -50,6 +50,10 @@ public:
 
 	static void Initialize();
 
+	// terrain heights under the water (a single-channel float texture covering size x size world units from
+	// minX, minZ): waves fade out as the water gets shallower than shoreDepth and stay flat over land. nullptr removes it
+	static void SetShoreHeightMap(const wiGraphics::Texture* heightMap, float minX, float minZ, float size, float shoreDepth);
+
 	bool IsValid() const { return displacementMap.IsValid(); }
 
 protected:

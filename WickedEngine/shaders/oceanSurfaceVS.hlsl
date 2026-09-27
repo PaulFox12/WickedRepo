@@ -2,6 +2,7 @@
 #include "oceanSurfaceHF.hlsli"
 
 TEXTURE2D(texture_displacementmap, float4, TEXSLOT_ONDEMAND0);
+TEXTURE2D(texture_shoreheightmap, float, TEXSLOT_ONDEMAND2);
 
 static const float3 QUAD[] = {
 	float3(0, 0, 0),
@@ -66,6 +67,18 @@ PSIn main(uint fakeIndex : SV_VERTEXID)
 	float2 nextUV = nextWorldPos.xz * xOceanPatchSizeRecip * 0.0254;
 	float3 displacement = texture_displacementmap.SampleGrad(sampler_linear_wrap, uv + xOceanMapHalfTexel, nextUV.x - uv.x, nextUV.y - uv.y).xzy * 39.37;
 	displacement *= 1 - saturate(distance(g_xCamera_CamPos, worldPos) * 0.0025f * 0.0254);
+
+	// waves fade out as the water gets shallow and stay flat over land (wiOcean::SetShoreHeightMap)
+	[branch]
+	if (xOceanShoreMap.z > 0)
+	{
+		float2 shoreUV = (worldPos.xz - xOceanShoreMap.xy) / xOceanShoreMap.z;
+		if (all(shoreUV >= 0) && all(shoreUV <= 1))
+		{
+			float terrainHeight = texture_shoreheightmap.SampleLevel(sampler_linear_clamp, shoreUV, 0);
+			displacement *= smoothstep(0, xOceanShoreMap.w, xOceanWaterHeight - terrainHeight);
+		}
+	}
 	/*
 	float4 screenPos = mul(g_xCamera_VP, float4(worldPos, 1));
 	screenPos.xy /= screenPos.w;
