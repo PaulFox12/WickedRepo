@@ -653,7 +653,7 @@ CBUFFER(FrameCB, CBSLOT_RENDERER_FRAME)
 	int			g_xFrame_ObjectShaderSamplerIndex;
 	float		g_xFrame_BlueNoisePhase;
 	float		g_xFrame_DeSaturate;
-	float		filler1;
+	float		g_xFrame_TreeWindSpeed;						// tree sway speed; 0 = tied to g_xFrame_TreeWind as before
 
 	AtmosphereParameters g_xFrame_Atmosphere;
 	VolumetricCloudParameters g_xFrame_VolumetricClouds;

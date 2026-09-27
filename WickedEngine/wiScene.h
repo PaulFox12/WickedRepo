@@ -1263,6 +1263,7 @@ namespace wiScene
 		uint  pp_voxel_steps = 10;
 		float pp_alpha = 1.8f;
 		float tree_wind = 0.0f;
+		float tree_wind_speed = 0.0f; // not serialized; 0 = sway speed tied to tree_wind
 		float tree_sss = 0.0f;
 
 		wiOcean::OceanParameters oceanParameters;

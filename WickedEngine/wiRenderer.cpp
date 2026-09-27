@@ -4707,6 +4707,7 @@ void UpdatePerFrameData(
 	frameCB.g_xFrame_WindWaveSize = vis.scene->weather.windWaveSize;
 	frameCB.g_xFrame_WindDirection = vis.scene->weather.windDirection;
 	frameCB.g_xFrame_TreeWind = vis.scene->weather.tree_wind;
+	frameCB.g_xFrame_TreeWindSpeed = vis.scene->weather.tree_wind_speed;
 	frameCB.g_xFrame_TreeSubSurfaceScattering = vis.scene->weather.tree_sss;
 	
 	frameCB.g_xFrame_StaticSkyGamma = 0.0f;
