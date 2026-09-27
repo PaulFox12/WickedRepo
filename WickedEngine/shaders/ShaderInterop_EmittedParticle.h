@@ -32,6 +32,8 @@ static const uint EMITTER_OPTION_BIT_FRAME_BLENDING_ENABLED = 1 << 0;
 static const uint EMITTER_OPTION_BIT_SPH_ENABLED = 1 << 1;
 static const uint EMITTER_OPTION_BIT_MESH_SHADER_ENABLED = 1 << 2;
 
+static const uint EMITTER_KILLBOX_COUNT = 8;
+
 CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 {
 	float4x4	xEmitterWorld;
@@ -111,7 +113,11 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 	float xParticleRandomPos;
 	float xParticleRandomPosScale;
 	uint xTotalEmitCount;
-	float fillerdummy2;
+	uint xEmitterKillBoxCount;
+
+	// world boxes that remove any particle inside them (appended, so the other shaders' layout is unchanged)
+	float4 xEmitterKillBoxMin[EMITTER_KILLBOX_COUNT];
+	float4 xEmitterKillBoxMax[EMITTER_KILLBOX_COUNT];
 
 };
 

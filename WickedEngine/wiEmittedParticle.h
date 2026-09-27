@@ -172,6 +172,12 @@ public:
 	inline bool IsActive() const { return bActive; }
 	inline void SetActive(bool value) { bActive = value; }
 
+	// Set at runtime, not serialized. Particles inside a kill box (world min/max) are removed, e.g. rain kept out of a building.
+	uint32_t killbox_count = 0;
+	XMFLOAT4 killbox_min[EMITTER_KILLBOX_COUNT] = {};
+	XMFLOAT4 killbox_max[EMITTER_KILLBOX_COUNT] = {};
+	float opacity_scale = 1.0f; // multiplies the material opacity
+
 	bool bStatActive = false;
 	inline bool IsStatActive() const { return bStatActive; }
 	inline void SetStatActive(bool value) { bStatActive = value; }

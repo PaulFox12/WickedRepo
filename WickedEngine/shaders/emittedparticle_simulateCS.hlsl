@@ -157,6 +157,24 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
 
 			particle.life -= dt;
 
+			// kill boxes: a particle that is inside one dies this frame, so it is never drawn there
+			bool killed = false;
+			for (uint k = 0; k < xEmitterKillBoxCount; ++k)
+			{
+				if (all(particle.position >= xEmitterKillBoxMin[k].xyz) && all(particle.position <= xEmitterKillBoxMax[k].xyz))
+				{
+					killed = true;
+				}
+			}
+			[branch]
+			if (killed)
+			{
+				uint deadIndex;
+				counterBuffer.InterlockedAdd(PARTICLECOUNTER_OFFSET_DEADCOUNT, 1, deadIndex);
+				deadBuffer[deadIndex] = particleIndex;
+				return;
+			}
+
 			// write back simulated particle:
 			particleBuffer[particleIndex] = particle;
 

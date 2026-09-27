@@ -343,7 +343,7 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleRotation = rotation * XM_PI * 60;
 		cb.xParticleColor = wiMath::CompressColor(XMFLOAT4(material.baseColor.x, material.baseColor.y, material.baseColor.z, 1));
 		cb.xParticleEmissive = material.emissiveColor.w;
-		cb.xEmitterOpacity = material.GetOpacity();
+		cb.xEmitterOpacity = material.GetOpacity() * opacity_scale;
 		cb.xParticleMass = mass;
 		cb.xEmitterMaxParticleCount = MAX_PARTICLES;
 		cb.xEmitterFixedTimestep = FIXED_TIMESTEP;
@@ -377,7 +377,14 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleRandomPos = random_position;
 		cb.xParticleRandomPosScale = random_position_scale;
 		cb.xTotalEmitCount = total_emit_count;
-		
+
+		cb.xEmitterKillBoxCount = std::min(killbox_count, EMITTER_KILLBOX_COUNT);
+		for (uint32_t i = 0; i < cb.xEmitterKillBoxCount; ++i)
+		{
+			cb.xEmitterKillBoxMin[i] = killbox_min[i];
+			cb.xEmitterKillBoxMax[i] = killbox_max[i];
+		}
+
 //#endif
 		cb.xEmitterFramesXY = uint2(std::max(1u, framesX), std::max(1u, framesY));
 		cb.xEmitterFrameCount = std::max(1u, frameCount);
