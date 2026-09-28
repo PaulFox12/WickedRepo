@@ -4973,6 +4973,14 @@ void UpdateRenderData(
 			entityArray[entityCounter].SetRange(decal.range);
 			entityArray[entityCounter].color = wiMath::CompressColor(XMFLOAT4(decal.color.x, decal.color.y, decal.color.z, decal.GetOpacity()));
 			entityArray[entityCounter].SetEnergy(decal.emissive);
+#ifdef GGREDUCED
+			// GameGuru's decal modes (GGDecalHF.hlsli): the facing cutoff goes in the cone angle slot, unused by decals
+			if (decal.facing >= -1.0f)
+			{
+				entityArray[entityCounter].SetFlags(ENTITY_FLAG_DECAL_FACING);
+				entityArray[entityCounter].SetConeAngleCos(decal.facing);
+			}
+#endif
 
 			entityArray[entityCounter].SetIndices(matrixCounter, 0);
 			matrixArray[matrixCounter] = XMMatrixInverse(nullptr, XMLoadFloat4x4(&decal.world));

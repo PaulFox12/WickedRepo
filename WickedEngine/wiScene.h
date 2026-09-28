@@ -1080,6 +1080,12 @@ namespace wiScene
 		std::shared_ptr<wiResource> texture;
 		std::shared_ptr<wiResource> normal;
 
+#ifdef GGREDUCED
+		// GameGuru's decal modes (GGDecalHF.hlsli), set at run time and not serialized: from -1 up, the decal paints only
+		// surfaces facing along its Z by more than this cosine; below -1, every surface in its box
+		float facing = -2.0f;
+#endif
+
 		inline float GetOpacity() const { return color.w; }
 
 		void Serialize(wiArchive& archive, wiECS::EntitySerializer& seri);
