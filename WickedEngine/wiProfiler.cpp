@@ -62,6 +62,26 @@ namespace wiProfiler
 
 	void BeginFrame()
 	{
+#ifdef GGREDUCED
+		// the draw call and polygon counts are taken every frame, as the renderer counts whether or not profiling is on
+		// (before, with it off they were never reset, so they only grew)
+		iOldDrawCalls = iDrawCalls;
+		iOldDrawCallsShadows = iDrawCallsShadows;
+		iOldDrawCallsShadowsCube = iDrawCallsShadowsCube;
+		iOldDrawCallsTransparent = iDrawCallsTransparent;
+		iDrawCalls = 0;
+		iDrawCallsShadows = 0;
+		iDrawCallsShadowsCube = 0;
+		iDrawCallsTransparent = 0;
+
+		iOldPolygonsDrawn = iPolygonsDrawn;
+		iOldPolygonsDrawnShadows = iPolygonsDrawnShadows;
+		iOldPolygonsDrawnTransparent = iPolygonsDrawnTransparent;
+		iPolygonsDrawn = 0;
+		iPolygonsDrawnShadows = 0;
+		iPolygonsDrawnTransparent = 0;
+#endif
+
 		if (!ENABLED)
 			return;
 
@@ -87,24 +107,6 @@ namespace wiProfiler
 
 		CommandList cmd = wiRenderer::GetDevice()->BeginCommandList();
 		gpu_frame = BeginRangeGPU("GPU Frame", cmd);
-
-#ifdef GGREDUCED
-		iOldDrawCalls = iDrawCalls; 
-		iOldDrawCallsShadows = iDrawCallsShadows;
-		iOldDrawCallsShadowsCube = iDrawCallsShadowsCube;
-		iOldDrawCallsTransparent = iDrawCallsTransparent;
-		iDrawCalls = 0;
-		iDrawCallsShadows = 0;
-		iDrawCallsShadowsCube = 0;
-		iDrawCallsTransparent = 0;
-
-		iOldPolygonsDrawn = iPolygonsDrawn;
-		iOldPolygonsDrawnShadows = iPolygonsDrawnShadows;
-		iOldPolygonsDrawnTransparent = iPolygonsDrawnTransparent;
-		iPolygonsDrawn = 0;
-		iPolygonsDrawnShadows = 0;
-		iPolygonsDrawnTransparent = 0;
-#endif
 	}
 	void EndFrame(CommandList cmd)
 	{
