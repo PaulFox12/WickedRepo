@@ -1302,6 +1302,10 @@ namespace wiScene
 		bool loopingStop = false;
 		float fLastVolume = -1;
 		float CurveDistanceScaler = 250;
+		// GGREDUCED: where the sound was at the last update and its eased velocity, for doppler (not serialized)
+		XMFLOAT3 dopplerPrevPos = XMFLOAT3(0, 0, 0);
+		XMFLOAT3 dopplerVelocity = XMFLOAT3(0, 0, 0);
+		bool dopplerPrevValid = false;
 
 		inline bool IsPlaying() const { return _flags & PLAYING; }
 		inline bool IsLooped() const { return _flags & LOOPED; }
@@ -1403,6 +1407,10 @@ namespace wiScene
 
 		// Non-serialized attributes:
 		float dt = 0;
+		// GGREDUCED: the listener (camera) at the last sound update and its eased velocity, for doppler
+		XMFLOAT3 soundListenerPrevPos = XMFLOAT3(0, 0, 0);
+		XMFLOAT3 soundListenerVelocity = XMFLOAT3(0, 0, 0);
+		bool soundListenerPrevValid = false;
 		enum FLAGS
 		{
 			EMPTY = 0,

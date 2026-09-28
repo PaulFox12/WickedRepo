@@ -4405,6 +4405,40 @@ OPTICK_EVENT();
 		}
 	}
 	}
+#ifdef GGREDUCED
+	// doppler: a velocity from how far a sound or the listener moved since the last update, in world units a second, eased
+	// over about a tenth of a second so a position set less often than every frame doesn't make the pitch jitter. The first
+	// update, and a step faster than sound (a teleport, a camera cut), count as not moving. An update without time (the
+	// scene updates after removing objects) leaves it to the next real step
+	static void UpdateDopplerVelocity(const XMFLOAT3& pos, XMFLOAT3& prevPos, bool& prevValid, XMFLOAT3& velocity, float dt)
+	{
+		if (dt <= 0)
+			return;
+		if (prevValid)
+		{
+			XMFLOAT3 step = XMFLOAT3((pos.x - prevPos.x) / dt, (pos.y - prevPos.y) / dt, (pos.z - prevPos.z) / dt);
+			float speedOfSound = wiAudio::GetSpeedOfSound();
+			if (step.x * step.x + step.y * step.y + step.z * step.z > speedOfSound * speedOfSound)
+			{
+				velocity = XMFLOAT3(0, 0, 0);
+			}
+			else
+			{
+				float blend = std::min(1.0f, dt * 10.0f);
+				velocity.x += (step.x - velocity.x) * blend;
+				velocity.y += (step.y - velocity.y) * blend;
+				velocity.z += (step.z - velocity.z) * blend;
+			}
+		}
+		else
+		{
+			velocity = XMFLOAT3(0, 0, 0);
+		}
+		prevPos = pos;
+		prevValid = true;
+	}
+#endif
+
 	void Scene::RunSoundUpdateSystem(wiJobSystem::context& ctx)
 	{
 		const CameraComponent& camera = GetCamera();
@@ -4412,6 +4446,10 @@ OPTICK_EVENT();
 		instance3D.listenerPos = camera.Eye;
 		instance3D.listenerUp = camera.Up;
 		instance3D.listenerFront = camera.At;
+#ifdef GGREDUCED
+		UpdateDopplerVelocity(camera.Eye, soundListenerPrevPos, soundListenerPrevValid, soundListenerVelocity, dt);
+		instance3D.listenerVelocity = soundListenerVelocity;
+#endif
 
 		for (size_t i = 0; i < sounds.GetCount(); ++i)
 		{
@@ -4424,9 +4462,20 @@ OPTICK_EVENT();
 				if (transform != nullptr)
 				{
 					instance3D.emitterPos = transform->GetPosition();
+#ifdef GGREDUCED
+					UpdateDopplerVelocity(instance3D.emitterPos, sound.dopplerPrevPos, sound.dopplerPrevValid, sound.dopplerVelocity, dt);
+					instance3D.emitterVelocity = sound.dopplerVelocity;
+#endif
 					wiAudio::Update3D(&sound.soundinstance, instance3D, sound.CurveDistanceScaler);
 				}
 			}
+#ifdef GGREDUCED
+			else
+			{
+				// a sound that plays again starts from rest, not from where it last played
+				sound.dopplerPrevValid = false;
+			}
+#endif
 			if (bIsplaying)
 			{
 				wiAudio::Play(&sound.soundinstance);

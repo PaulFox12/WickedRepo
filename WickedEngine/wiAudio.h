@@ -88,6 +88,14 @@ namespace wiAudio
 	};
 	void Update3D(SoundInstance* instance, const SoundInstance3D& instance3D, float CurveDistanceScaler);
 
+#ifdef GGREDUCED
+	// doppler: the speed of sound in world units a second (GG's units are inches), and a strength on every 3D sound's doppler
+	// shift, 1 as in the real world (the default) and 0 for none
+	float GetSpeedOfSound();
+	void SetDopplerScale(float scale);
+	float GetDopplerScale();
+#endif
+
 	enum REVERB_PRESET
 	{
 		REVERB_PRESET_DEFAULT,

@@ -65,6 +65,12 @@ namespace wiAudio
 		XAUDIO2FX_I3DL2_PRESET_PLATE,
 	};
 
+#ifdef GGREDUCED
+	// GG's world units are inches, so the speed of sound for X3DAudio's doppler is in inches a second
+	static const float speedOfSound = X3DAUDIO_SPEED_OF_SOUND * 39.37f;
+	static float dopplerScale = 1.0f;
+#endif
+
 	struct AudioInternal
 	{
 		bool success = false;
@@ -121,7 +127,11 @@ namespace wiAudio
 
 			DWORD channelMask;
 			masteringVoice->GetChannelMask(&channelMask);
+#ifdef GGREDUCED
+			hr = X3DAudioInitialize(channelMask, speedOfSound, audio3D);
+#else
 			hr = X3DAudioInitialize(channelMask, X3DAUDIO_SPEED_OF_SOUND, audio3D);
+#endif
 			assert(SUCCEEDED(hr));
 
 			// Reverb setup:
@@ -747,7 +757,11 @@ namespace wiAudio
 			emitter.ChannelRadius = 0.1f;
 			//emitter.CurveDistanceScaler = 1;
 			emitter.CurveDistanceScaler = CurveDistanceScaler;// 180; //150,200,350, 400; //PE: GGREDUCED
+#ifdef GGREDUCED
+			emitter.DopplerScaler = dopplerScale;
+#else
 			emitter.DopplerScaler = 1;
+#endif
 
 			UINT32 flags = 0;
 			flags |= X3DAUDIO_CALCULATE_MATRIX;
@@ -809,6 +823,12 @@ namespace wiAudio
 			assert(SUCCEEDED(hr));
 		}
 	}
+
+#ifdef GGREDUCED
+	float GetSpeedOfSound() { return speedOfSound; }
+	void SetDopplerScale(float scale) { dopplerScale = scale < 0 ? 0 : scale; }
+	float GetDopplerScale() { return dopplerScale; }
+#endif
 }
 
 #else
@@ -835,6 +855,12 @@ namespace wiAudio
 	void Update3D(SoundInstance* instance, const SoundInstance3D& instance3D, float CurveDistanceScaler) {}
 
 	void SetReverb(REVERB_PRESET preset) {}
+
+#ifdef GGREDUCED
+	float GetSpeedOfSound() { return 343.5f * 39.37f; }
+	void SetDopplerScale(float scale) {}
+	float GetDopplerScale() { return 0; }
+#endif
 }
 
 #endif // _WIN32
