@@ -269,6 +269,8 @@ static const uint ENTITY_TYPE_FORCEFIELD_PLANE = 201;
 static const uint ENTITY_FLAG_LIGHT_STATIC = 1 << 0;
 // GameGuru's decal modes (GGDecalHF.hlsli): paints only surfaces facing along its Z, by more than its cone angle cosine
 static const uint ENTITY_FLAG_DECAL_FACING = 1 << 1;
+// a blast round the decal's centre: triplanar, over the sphere inside its box, on surfaces facing the centre
+static const uint ENTITY_FLAG_DECAL_BLAST = 1 << 2;
 
 static const uint SHADER_ENTITY_COUNT = 256;
 static const uint SHADER_ENTITY_TILE_BUCKET_COUNT = SHADER_ENTITY_COUNT / 32;

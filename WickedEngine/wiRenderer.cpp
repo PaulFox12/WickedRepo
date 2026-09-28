@@ -4974,8 +4974,16 @@ void UpdateRenderData(
 			entityArray[entityCounter].color = wiMath::CompressColor(XMFLOAT4(decal.color.x, decal.color.y, decal.color.z, decal.GetOpacity()));
 			entityArray[entityCounter].SetEnergy(decal.emissive);
 #ifdef GGREDUCED
-			// GameGuru's decal modes (GGDecalHF.hlsli): the facing cutoff goes in the cone angle slot, unused by decals
-			if (decal.facing >= -1.0f)
+			// GameGuru's decal modes (GGDecalHF.hlsli): the facing cutoff goes in the cone angle slot, unused by decals, and a
+			// blast also carries its blend sharpness in the direction slot and where the first surfaces lie in userdata
+			if (decal.blast)
+			{
+				entityArray[entityCounter].SetFlags(ENTITY_FLAG_DECAL_BLAST);
+				entityArray[entityCounter].SetConeAngleCos(decal.facing);
+				entityArray[entityCounter].SetDirection(XMFLOAT3(decal.blend_sharpness, 0, 0));
+				entityArray[entityCounter].userdata = decal.occlusion;
+			}
+			else if (decal.facing >= -1.0f)
 			{
 				entityArray[entityCounter].SetFlags(ENTITY_FLAG_DECAL_FACING);
 				entityArray[entityCounter].SetConeAngleCos(decal.facing);

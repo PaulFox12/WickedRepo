@@ -1084,6 +1084,12 @@ namespace wiScene
 		// GameGuru's decal modes (GGDecalHF.hlsli), set at run time and not serialized: from -1 up, the decal paints only
 		// surfaces facing along its Z by more than this cosine; below -1, every surface in its box
 		float facing = -2.0f;
+		// a blast round the box's centre (then facing is towards the centre): triplanar over the sphere inside its box, the
+		// blend of the three planes sharpened by blend_sharpness, and occlusion holding how far the first surface lies along
+		// each of the box's six axes, 5 bits each
+		bool blast = false;
+		float blend_sharpness = 8.0f;
+		uint32_t occlusion = ~0u;
 #endif
 
 		inline float GetOpacity() const { return color.w; }
