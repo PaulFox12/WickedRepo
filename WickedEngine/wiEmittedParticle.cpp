@@ -338,10 +338,10 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleNormalFactor = normal_factor;
 		cb.xParticleRandomFactor = random_factor;
 		cb.xParticleScaling = scaleX;
-		cb.xParticleSize = size;
+		cb.xParticleSize = size * size_scale;
 		cb.xParticleMotionBlurAmount = motionBlurAmount;
 		cb.xParticleRotation = rotation * XM_PI * 60;
-		cb.xParticleColor = wiMath::CompressColor(XMFLOAT4(material.baseColor.x, material.baseColor.y, material.baseColor.z, 1));
+		cb.xParticleColor = wiMath::CompressColor(XMFLOAT4(material.baseColor.x * color_tint.x, material.baseColor.y * color_tint.y, material.baseColor.z * color_tint.z, 1));
 		cb.xParticleEmissive = material.emissiveColor.w;
 		cb.xEmitterOpacity = material.GetOpacity() * opacity_scale;
 		cb.xParticleMass = mass;

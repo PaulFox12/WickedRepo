@@ -177,6 +177,8 @@ public:
 	XMFLOAT4 killbox_min[EMITTER_KILLBOX_COUNT] = {};
 	XMFLOAT4 killbox_max[EMITTER_KILLBOX_COUNT] = {};
 	float opacity_scale = 1.0f; // multiplies the material opacity
+	float size_scale = 1.0f; // multiplies the particle size
+	XMFLOAT3 color_tint = XMFLOAT3(1, 1, 1); // multiplies the material colour
 
 	bool bStatActive = false;
 	inline bool IsStatActive() const { return bStatActive; }
