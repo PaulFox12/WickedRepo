@@ -30,6 +30,7 @@
     <None Include="$(MSBuildThisFileDirectory)imageHF.hlsli" />
     <None Include="$(MSBuildThisFileDirectory)impostorHF.hlsli" />
     <None Include="$(MSBuildThisFileDirectory)lightingHF.hlsli" />
+    <None Include="$(MSBuildThisFileDirectory)GGDecalHF.hlsli" />
     <None Include="$(MSBuildThisFileDirectory)objectHF.hlsli" />
     <None Include="$(MSBuildThisFileDirectory)objectHF_tessellation.hlsli" />
     <None Include="$(MSBuildThisFileDirectory)oceanSurfaceHF.hlsli" />
