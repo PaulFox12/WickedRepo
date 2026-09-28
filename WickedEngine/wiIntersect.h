@@ -102,6 +102,7 @@ struct RAY
 {
 	XMFLOAT3 origin, direction, direction_inverse;
 	bool bIgnoreNearestTriangle = false;
+	float TMax = FLT_MAX; // GG: pick distance, boxes beyond it are skipped
 	RAY(const XMFLOAT3& newOrigin = XMFLOAT3(0, 0, 0), const XMFLOAT3& newDirection = XMFLOAT3(0, 0, 1)) : RAY(XMLoadFloat3(&newOrigin), XMLoadFloat3(&newDirection)) {}
 	RAY(const XMVECTOR& newOrigin, const XMVECTOR& newDirection) {
 		XMStoreFloat3(&origin, newOrigin);
