@@ -138,6 +138,10 @@ namespace wiProfiler
 		{
 			auto& range = x.second;
 
+#ifdef GGREDUCED
+			float previous_time = range.time;
+			bool skip_sample = false;
+#endif
 			range.time = 0;
 			if (range.IsCPURange())
 			{
@@ -151,11 +155,27 @@ namespace wiProfiler
 				{
 					uint64_t begin_result = queryResults[begin_query];
 					uint64_t end_result = queryResults[end_query];
+#ifdef GGREDUCED
+					// a query the GPU has not written yet keeps an old result (QueryRead does not wait), and end - begin
+					// would then wrap round to a huge time, which spoils the average for as many frames as it takes; such
+					// a sample is skipped and the range keeps its last time
+					if (end_result <= begin_result)
+						skip_sample = true;
+					else
+#endif
 					range.time = (float)abs((double)(end_result - begin_result) / gpu_frequency);
 				}
 				range.gpuBegin[queryheap_idx] = -1;
 				range.gpuEnd[queryheap_idx] = -1;
 			}
+#ifdef GGREDUCED
+			if (skip_sample)
+			{
+				range.time = previous_time;
+				range.in_use = false;
+				continue;
+			}
+#endif
 			range.times[range.avg_counter++ % arraysize(range.times)] = range.time;
 
 			if (range.avg_counter > arraysize(range.times))
