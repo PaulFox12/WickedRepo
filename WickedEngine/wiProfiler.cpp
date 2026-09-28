@@ -277,6 +277,25 @@ namespace wiProfiler
 	int GetFrustumCulled(void) { return(iFrustumculled); }
 	void SetFrustumCulled(int iFrustum) { iFrustumculled = iFrustum; }
 
+	// the time of the first range with this name ("GPU Frame", "CPU Frame", ...) in ms, averaged over the last frames; -1 while
+	// profiling is off or until the range has been timed for as many frames as the average takes (the first GPU results
+	// arrive some frames late)
+	float GetRangeTime(const char* name)
+	{
+		if (!ENABLED || !initialized || !name)
+			return -1;
+
+		float time = -1;
+		lock.lock();
+		auto it = ranges.find(wiHelper::string_hash(name));
+		if (it != ranges.end() && it->second.avg_counter > arraysize(it->second.times))
+		{
+			time = it->second.time;
+		}
+		lock.unlock();
+		return time;
+	}
+
 
 	//We need the data returned here.
 	std::string GetProfilerData(void)

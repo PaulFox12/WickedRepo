@@ -49,6 +49,8 @@ namespace wiProfiler
 	int GetFrustumCulled(void);
 	void SetFrustumCulled(int iFrustum);
 
+	float GetRangeTime(const char* name);
+
 	void ResetPeek (void);
 
 #endif
