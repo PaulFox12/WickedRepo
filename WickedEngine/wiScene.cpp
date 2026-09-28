@@ -4862,6 +4862,39 @@ OPTICK_EVENT();
 	}
 #endif
 
+	// GG: whether a pick ray meets a box going forward from its origin, up to ray.TMax; fEntry is the distance where it
+	// enters (0 when the origin is inside). AABB::intersects(RAY) tests the whole line both ways, with no end, so a pick
+	// used to test the triangles of every object on that line. The triangle test rejects hits behind the origin, and the
+	// callers drop hits beyond TMax, so skipping those boxes changes no result
+	static bool PickRayMeetsBox(const RAY& ray, const XMFLOAT3& dirNormalized, const AABB& box, float& fEntry)
+	{
+		float tmin = 0.0f;
+		float tmax = ray.TMax;
+		const float o[3] = { ray.origin.x, ray.origin.y, ray.origin.z };
+		const float d[3] = { dirNormalized.x, dirNormalized.y, dirNormalized.z };
+		const float mn[3] = { box._min.x, box._min.y, box._min.z };
+		const float mx[3] = { box._max.x, box._max.y, box._max.z };
+		for (int a = 0; a < 3; a++)
+		{
+			if (fabsf(d[a]) < 1e-12f)
+			{
+				if (o[a] < mn[a] || o[a] > mx[a]) return false;
+			}
+			else
+			{
+				float inv = 1.0f / d[a];
+				float t1 = (mn[a] - o[a]) * inv;
+				float t2 = (mx[a] - o[a]) * inv;
+				if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+				if (t1 > tmin) tmin = t1;
+				if (t2 < tmax) tmax = t2;
+				if (tmin > tmax) return false;
+			}
+		}
+		fEntry = tmin;
+		return true;
+	}
+
 	PickResult PickThread(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene)
 	{
 #ifdef REMOVE_THREAD_PICK
@@ -4878,10 +4911,25 @@ OPTICK_EVENT();
 		std::vector<std::future<ThreadResult>> futures;
 		std::atomic<float> closestDistance(FLT_MAX);
 
+		XMFLOAT3 dirNormalized;
+		XMStoreFloat3(&dirNormalized, rayDirection);
+
 		for (size_t i = 0; i < scene.objects.GetCount(); ++i)
 		{
 			const AABB& aabb = scene.aabb_objects[i];
-			if (!ray.intersects(aabb))
+			float fEntry;
+			if (!PickRayMeetsBox(ray, dirNormalized, aabb, fEntry))
+			{
+				continue;
+			}
+			// GG: a box that starts beyond the closest hit so far holds nothing nearer
+			if (fEntry > closestDistance)
+			{
+				continue;
+			}
+			// GG: and the layer test before queueing a job (ignored objects are moved to another layer)
+			const LayerComponent* layer = scene.layers.GetComponent(scene.aabb_objects.GetEntity(i));
+			if (layer != nullptr && !(layer->GetLayerMask() & layerMask))
 			{
 				continue;
 			}
@@ -4960,11 +5008,14 @@ OPTICK_EVENT();
 		{
 			const XMVECTOR rayOrigin = XMLoadFloat3(&ray.origin);
 			const XMVECTOR rayDirection = XMVector3Normalize(XMLoadFloat3(&ray.direction));
+			XMFLOAT3 dirNormalized;
+			XMStoreFloat3(&dirNormalized, rayDirection);
 			
 			for (size_t i = 0; i < scene.aabb_objects.GetCount(); ++i)
 			{
 				const AABB& aabb = scene.aabb_objects[i];
-				if (!ray.intersects(aabb))
+				float fEntry;
+				if (!PickRayMeetsBox(ray, dirNormalized, aabb, fEntry) || fEntry > result.distance)
 				{
 					continue;
 				}
