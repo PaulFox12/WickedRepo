@@ -677,7 +677,7 @@ namespace wiScene
 		int prev_transform_index = -1;
 		bool bPrev_In_Frustum = true;
 		uint32_t activelod = 0;
-		uint32_t forcelod = 0;
+		uint32_t forcelod = 0; // GG: the LOD forced plus one, 0 to choose by distance
 
 		// occlusion result history bitfield (32 bit->32 frame history)
 		uint32_t occlusionHistory = ~0;

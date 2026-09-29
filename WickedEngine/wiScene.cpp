@@ -3784,7 +3784,8 @@ OPTICK_EVENT();
 						extern float fLODMultiplier;
 						float length_between_lod = 200.0f * fLODMultiplier;
 						float dist = object.GetCameraDistance();
-						int active_lod = object.forcelod;
+						// GG: forcelod is the LOD forced plus one, so LOD 0 can be forced too; past the last it draws the last
+						int active_lod = object.forcelod > 0 ? std::min((int)object.forcelod - 1, (int)mesh->lodlevels) : 0;
 						if (object.forcelod == 0)
 						{
 							if (mesh->subsets.size() > 1 && mesh->lodlevels >= 1 && dist > (length_between_lod * 2))
