@@ -12,7 +12,9 @@
 //   weights sharpened by the power in the direction slot's x, so a flat face takes one unstretched sample. userdata holds
 //   how far the first surface lies along each of the box's six axes (5 bits each from bit 0: +x, -x, +y, -y, +z, -z, in
 //   30ths of the radius, 31 for none), and a point further along the axis nearest its direction from the centre lies
-//   behind that surface and stays clean
+//   behind that surface and stays clean. When the surface hit is a flat face across one of the box's axes, the direction
+//   slot's y is the direction into it (0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z; below 0 for none) and its z how far along it a
+//   point may lie (a little past the face): anything behind the surface hit stays clean, such as a room behind a wall
 // This file is in both GameGuru's CustomShaders and Wicked's shaders folder (for Wicked's own objectHF.hlsli, which the
 // offline shader compiler builds), and the two copies must stay the same
 
@@ -47,12 +49,23 @@ inline float4 GGBlastDecalColor(in ShaderEntity decal, in float4x4 decalProjecti
 	if (firstSurface < 31 && abs(along) > firstSurface / 30.0 + 0.06)
 		blend = 0;
 
+	// nothing behind the surface hit, when it is a flat face across one of the box's axes
+	const float3 blastParams = decal.GetDirection();
+	if (blastParams.y >= 0)
+	{
+		const uint hitDirection = (uint)(blastParams.y + 0.5);
+		const uint hitAxis = hitDirection / 2;
+		const float alongHit = (hitAxis == 0 ? boxPos.x : (hitAxis == 1 ? boxPos.y : boxPos.z)) * ((hitDirection & 1) ? -1 : 1);
+		if (alongHit > blastParams.z)
+			blend = 0;
+	}
+
 	[branch]
 	if (blend > 0)
 	{
 		// triplanar: each plane weighted by how squarely the surface faces it, sharpened, and planes under 0.01 skipped
 		const float3 boxN = normalize(mul((float3x3)decalProjection, decal_faceN));
-		const float sharpness = max(1, decal.GetDirection().x);
+		const float sharpness = max(1, blastParams.x);
 		float3 weights = pow(abs(boxN), float3(sharpness, sharpness, sharpness));
 		weights /= weights.x + weights.y + weights.z;
 		const float3 boxDX = mul((float3x3)decalProjection, P_dx);

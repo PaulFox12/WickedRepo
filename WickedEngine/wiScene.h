@@ -1090,6 +1090,10 @@ namespace wiScene
 		bool blast = false;
 		float blend_sharpness = 8.0f;
 		uint32_t occlusion = ~0u;
+		// when the surface hit is a flat face across one of the box's axes: the direction into it (0 +x to 5 -z; -1 none)
+		// and how far along it, in the box's units, a point may lie before it is behind that surface
+		int hit_direction = -1;
+		float hit_clip = 0.0f;
 #endif
 
 		inline float GetOpacity() const { return color.w; }
