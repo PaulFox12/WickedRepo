@@ -766,6 +766,7 @@ inline void ForwardLighting(inout Surface surface, inout Lighting lighting)
 		}
 
 		surface.albedo.rgb = lerp(surface.albedo.rgb, decalAccumulation.rgb, decalAccumulation.a);
+		GGDecalCoat(surface, decalAccumulation.a);
 	}
 #endif // DISABLE_DECALS
 
@@ -971,6 +972,7 @@ inline void TiledLighting(inout Surface surface, inout Lighting lighting, out fl
 		}
 
 		surface.albedo.rgb = lerp(surface.albedo.rgb, decalAccumulation.rgb, decalAccumulation.a);
+		GGDecalCoat(surface, decalAccumulation.a);
 	}
 #endif // DISABLE_DECALS
 

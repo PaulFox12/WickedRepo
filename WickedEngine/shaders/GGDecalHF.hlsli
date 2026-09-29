@@ -15,6 +15,8 @@
 //   behind that surface and stays clean. When the surface hit is a flat face across one of the box's axes, the direction
 //   slot's y is the direction into it (0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z; below 0 for none) and its z how far along it a
 //   point may lie (a little past the face): anything behind the surface hit stays clean, such as a room behind a wall
+// Every decal is a matte, non-metal coat (GGDecalCoat, after the decals are blended into the albedo), or a dark one would
+// not show on metal, whose albedo is black and whose colour is all in its reflection.
 // This file is in both GameGuru's CustomShaders and Wicked's shaders folder (for Wicked's own objectHF.hlsli, which the
 // offline shader compiler builds), and the two copies must stay the same
 
@@ -138,6 +140,21 @@ inline float4 GGDecalColor(in ShaderEntity decal, in float3 P, in float3 P_dx, i
 		}
 	}
 	return decalColor;
+}
+
+// after a surface's decals are blended into its albedo, coverage being how much they cover: under them the surface is a
+// matte, non-metal coat. Its lighting terms were worked out before the decals, so they are worked out again, only where a
+// decal lies
+inline void GGDecalCoat(inout Surface surface, in float coverage)
+{
+	[branch]
+	if (coverage > 0)
+	{
+		surface.f0 = lerp(surface.f0, 0.04, coverage);
+		surface.metalness = lerp(surface.metalness, 0, coverage);
+		surface.roughness = lerp(surface.roughness, 1, coverage);
+		surface.update();
+	}
 }
 
 #endif // GG_DECALHF
