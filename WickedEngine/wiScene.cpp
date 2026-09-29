@@ -26,6 +26,7 @@
 #include <mutex>
 #include <numeric>
 #include <future>
+#include <algorithm>
 #include <queue>
 
 #endif
@@ -4910,6 +4911,42 @@ OPTICK_EVENT();
 		}
 		return localResult;
 	}
+
+	// GG: take a job's hit if nearer, or as near from an earlier object in the scene (as the unsorted search kept it);
+	// a job that found nothing has no entity, though its distance may be the best known
+	static void PickMergeResult(PickResult& result, uint32_t& iResultIndex, const ThreadResult& localResult, uint32_t iIndex)
+	{
+		if (localResult.entity == INVALID_ENTITY)
+		{
+			return;
+		}
+		if (localResult.distance < result.distance || (localResult.distance == result.distance && iIndex < iResultIndex))
+		{
+			result.entity = localResult.entity;
+			result.position = localResult.position;
+			result.normal = localResult.normal;
+			result.distance = localResult.distance;
+			result.subsetIndex = localResult.subsetIndex;
+			result.vertexID0 = localResult.vertexID0;
+			result.vertexID1 = localResult.vertexID1;
+			result.vertexID2 = localResult.vertexID2;
+			result.bary = localResult.bary;
+			iResultIndex = iIndex;
+		}
+	}
+
+	// GG: lower the shared best distance to a job's hit, so jobs yet to start can skip boxes beyond it
+	static void PickPublishHit(std::atomic<float>& closestDistance, const ThreadResult& localResult)
+	{
+		if (localResult.entity == INVALID_ENTITY)
+		{
+			return;
+		}
+		float fBest = closestDistance;
+		while (localResult.distance < fBest && !closestDistance.compare_exchange_weak(fBest, localResult.distance))
+		{
+		}
+	}
 #endif
 
 	// GG: whether a pick ray meets a box going forward from its origin, up to ray.TMax; fEntry is the distance where it
@@ -4945,6 +4982,56 @@ OPTICK_EVENT();
 		return true;
 	}
 
+	// GG: an object a pick ray may hit, with the distance where the ray enters its box
+	struct PickCandidate
+	{
+		uint32_t index;
+		float fEntry;
+	};
+
+	// GG: the objects a pick ray may hit, nearest box first (only those in pObjectIndices when given)
+	static void PickGatherCandidates(const RAY& ray, const XMFLOAT3& dirNormalized, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, bool bSkipCollisionOff, const uint32_t* pObjectIndices, uint32_t count, std::vector<PickCandidate>& candidates)
+	{
+		const size_t objectCount = std::min(scene.objects.GetCount(), scene.aabb_objects.GetCount());
+		const size_t total = pObjectIndices ? count : objectCount;
+		for (size_t k = 0; k < total; ++k)
+		{
+			const size_t i = pObjectIndices ? pObjectIndices[k] : k;
+			if (i >= objectCount)
+			{
+				continue;
+			}
+			float fEntry;
+			if (!PickRayMeetsBox(ray, dirNormalized, scene.aabb_objects[i], fEntry))
+			{
+				continue;
+			}
+			const ObjectComponent& object = scene.objects[i];
+			if (object.meshID == INVALID_ENTITY || (bSkipCollisionOff && object.bDisableCollision))
+			{
+				continue;
+			}
+			if (!(renderTypeMask & object.GetRenderTypes()))
+			{
+				continue;
+			}
+#ifdef GGREDUCED
+			if (!object.IsRenderable())
+			{
+				//PE: Do not Pick from hidden objects.
+				continue;
+			}
+#endif
+			const LayerComponent* layer = scene.layers.GetComponent(scene.aabb_objects.GetEntity(i));
+			if (layer != nullptr && !(layer->GetLayerMask() & layerMask))
+			{
+				continue;
+			}
+			candidates.push_back({ (uint32_t)i, fEntry });
+		}
+		std::sort(candidates.begin(), candidates.end(), [](const PickCandidate& a, const PickCandidate& b) { return a.fEntry < b.fEntry || (a.fEntry == b.fEntry && a.index < b.index); });
+	}
+
 	PickResult PickThread(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene)
 	{
 #ifdef REMOVE_THREAD_PICK
@@ -4958,84 +5045,59 @@ OPTICK_EVENT();
 		const XMVECTOR rayOrigin = XMLoadFloat3(&ray.origin);
 		const XMVECTOR rayDirection = XMVector3Normalize(XMLoadFloat3(&ray.direction));
 
-		std::vector<std::future<ThreadResult>> futures;
 		std::atomic<float> closestDistance(FLT_MAX);
 
 		XMFLOAT3 dirNormalized;
 		XMStoreFloat3(&dirNormalized, rayDirection);
 
-		for (size_t i = 0; i < scene.objects.GetCount(); ++i)
+		// GG: nearest boxes first. A first wave the pool's size (this thread takes the nearest) usually finds the hit;
+		// the rest are then queued together, each skipped at its start if its box begins beyond the best hit so far
+		std::vector<PickCandidate> candidates;
+		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, nullptr, 0, candidates);
+		static const size_t waveSize = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 1;
+		uint32_t iResultIndex = UINT32_MAX;
+		std::vector<std::future<ThreadResult>> futures;
+		std::vector<uint32_t> futureIndices;
+		size_t next = 0;
+		for (int iPass = 0; iPass < 2 && next < candidates.size(); iPass++)
 		{
-			const AABB& aabb = scene.aabb_objects[i];
-			float fEntry;
-			if (!PickRayMeetsBox(ray, dirNormalized, aabb, fEntry))
+			const size_t end = iPass == 0 ? std::min(waveSize, candidates.size()) : candidates.size();
+			closestDistance = result.distance;
+			futures.clear();
+			futureIndices.clear();
+			for (size_t k = iPass == 0 ? next + 1 : next; k < end; ++k)
 			{
-				continue;
+				const PickCandidate candidate = candidates[k];
+				if (candidate.fEntry > result.distance)
+				{
+					break;
+				}
+				futureIndices.push_back(candidate.index);
+				futures.push_back(
+					pool.enqueue([&scene, &ray, &closestDistance, candidate, renderTypeMask, layerMask, rayOrigin, rayDirection]()
+					{
+						if (candidate.fEntry > closestDistance)
+						{
+							return ThreadResult();
+						}
+						ThreadResult localResult = ProcessObjectPicking(candidate.index, scene.objects[candidate.index], scene, ray, renderTypeMask, layerMask, rayOrigin, rayDirection, closestDistance);
+						PickPublishHit(closestDistance, localResult);
+						return localResult;
+					})
+				);
 			}
-			// GG: a box that starts beyond the closest hit so far holds nothing nearer
-			if (fEntry > closestDistance)
+			if (iPass == 0)
 			{
-				continue;
+				const PickCandidate& nearest = candidates[next];
+				ThreadResult localResult = ProcessObjectPicking(nearest.index, scene.objects[nearest.index], scene, ray, renderTypeMask, layerMask, rayOrigin, rayDirection, closestDistance);
+				PickPublishHit(closestDistance, localResult);
+				PickMergeResult(result, iResultIndex, localResult, nearest.index);
 			}
-			// GG: and the layer test before queueing a job (ignored objects are moved to another layer)
-			const LayerComponent* layer = scene.layers.GetComponent(scene.aabb_objects.GetEntity(i));
-			if (layer != nullptr && !(layer->GetLayerMask() & layerMask))
+			for (size_t f = 0; f < futures.size(); ++f)
 			{
-				continue;
+				PickMergeResult(result, iResultIndex, futures[f].get(), futureIndices[f]);
 			}
-
-			const ObjectComponent& object = scene.objects[i];
-			if (object.meshID == INVALID_ENTITY)
-			{
-				continue;
-			}
-			if (object.bDisableCollision)
-			{
-				continue;
-			}
-			if (!(renderTypeMask & object.GetRenderTypes()))
-			{
-				continue;
-			}
-
-#ifdef GGREDUCED
-			if (!object.IsRenderable())
-			{
-				//PE: Do not Pick from hidden objects.
-				continue;
-			}
-#endif
-
-
-			futures.push_back(
-				pool.enqueue(
-					ProcessObjectPicking,
-					i,
-					std::cref(object),
-					std::cref(scene),
-					std::cref(ray),
-					renderTypeMask,
-					layerMask,
-					rayOrigin,
-					rayDirection,
-					std::ref(closestDistance)
-				)
-			);
-		}
-
-		for (auto& fut : futures) {
-			ThreadResult localResult = fut.get();
-			if (localResult.distance < result.distance) {
-				result.entity = localResult.entity;
-				result.position = localResult.position;
-				result.normal = localResult.normal;
-				result.distance = localResult.distance;
-				result.subsetIndex = localResult.subsetIndex;
-				result.vertexID0 = localResult.vertexID0;
-				result.vertexID1 = localResult.vertexID1;
-				result.vertexID2 = localResult.vertexID2;
-				result.bary = localResult.bary;
-			}
+			next = end;
 		}
 
 		XMVECTOR N = XMLoadFloat3(&result.normal);
@@ -5066,48 +5128,18 @@ OPTICK_EVENT();
 		XMFLOAT3 dirNormalized;
 		XMStoreFloat3(&dirNormalized, rayDirection);
 
-		for (uint32_t k = 0; k < count; ++k)
+		// GG: nearest box first, stopping at the first box that starts beyond the best hit
+		std::vector<PickCandidate> candidates;
+		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, pObjectIndices, count, candidates);
+		uint32_t iResultIndex = UINT32_MAX;
+		for (const PickCandidate& candidate : candidates)
 		{
-			const uint32_t i = pObjectIndices[k];
-			if (i >= scene.objects.GetCount() || i >= scene.aabb_objects.GetCount())
+			if (candidate.fEntry > result.distance)
 			{
-				continue;
+				break;
 			}
-			float fEntry;
-			if (!PickRayMeetsBox(ray, dirNormalized, scene.aabb_objects[i], fEntry) || fEntry > closestDistance)
-			{
-				continue;
-			}
-
-			const ObjectComponent& object = scene.objects[i];
-			if (object.meshID == INVALID_ENTITY || object.bDisableCollision)
-			{
-				continue;
-			}
-			if (!(renderTypeMask & object.GetRenderTypes()))
-			{
-				continue;
-			}
-#ifdef GGREDUCED
-			if (!object.IsRenderable())
-			{
-				continue;
-			}
-#endif
-
-			ThreadResult localResult = ProcessObjectPicking(i, object, scene, ray, renderTypeMask, layerMask, rayOrigin, rayDirection, closestDistance);
-			if (localResult.entity != INVALID_ENTITY && localResult.distance < result.distance)
-			{
-				result.entity = localResult.entity;
-				result.position = localResult.position;
-				result.normal = localResult.normal;
-				result.distance = localResult.distance;
-				result.subsetIndex = localResult.subsetIndex;
-				result.vertexID0 = localResult.vertexID0;
-				result.vertexID1 = localResult.vertexID1;
-				result.vertexID2 = localResult.vertexID2;
-				result.bary = localResult.bary;
-			}
+			closestDistance = result.distance;
+			PickMergeResult(result, iResultIndex, ProcessObjectPicking(candidate.index, scene.objects[candidate.index], scene, ray, renderTypeMask, layerMask, rayOrigin, rayDirection, closestDistance), candidate.index);
 		}
 
 		if (result.entity != INVALID_ENTITY)
@@ -5136,38 +5168,19 @@ OPTICK_EVENT();
 			XMFLOAT3 dirNormalized;
 			XMStoreFloat3(&dirNormalized, rayDirection);
 			
-			for (size_t i = 0; i < scene.aabb_objects.GetCount(); ++i)
+			// GG: nearest box first, stopping at the first box that starts beyond the best hit
+			std::vector<PickCandidate> candidates;
+			PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, false, nullptr, 0, candidates);
+			uint32_t iResultIndex = UINT32_MAX;
+			for (const PickCandidate& candidate : candidates)
 			{
-				const AABB& aabb = scene.aabb_objects[i];
-				float fEntry;
-				if (!PickRayMeetsBox(ray, dirNormalized, aabb, fEntry) || fEntry > result.distance)
+				if (candidate.fEntry > result.distance)
 				{
-					continue;
+					break;
 				}
-
-				const ObjectComponent& object = scene.objects[i];
-				if (object.meshID == INVALID_ENTITY)
-				{
-					continue;
-				}
-				if (!(renderTypeMask & object.GetRenderTypes()))
-				{
-					continue;
-				}
-
-#ifdef GGREDUCED
-				if (!object.IsRenderable())
-				{
-					//PE: Do not Pick from hidden objects.
-					continue;
-				}
-#endif
-				Entity entity = scene.aabb_objects.GetEntity(i);
-				const LayerComponent* layer = scene.layers.GetComponent(entity);
-				if (layer != nullptr && !(layer->GetLayerMask() & layerMask))
-				{
-					continue;
-				}
+				const uint32_t iObject = candidate.index;
+				const ObjectComponent& object = scene.objects[iObject];
+				Entity entity = scene.aabb_objects.GetEntity(iObject);
 
 				const MeshComponent& mesh = *scene.meshes.GetComponent(object.meshID);
 				const bool softbody_active = false;
@@ -5238,7 +5251,7 @@ OPTICK_EVENT();
 									{
 										const XMVECTOR pos = XMVector3Transform(XMVectorAdd(rayOrigin_local, rayDirection_local * distance), objectMat);
 										distance = wiMath::Distance(pos, rayOrigin);
-										if (distance < temp_closest_distance)
+										if (distance < temp_closest_distance || (distance == temp_closest_distance && iObject < iResultIndex))
 										{
 											const XMVECTOR nor = XMVector3Normalize(XMVector3TransformNormal(XMVector3Cross(XMVectorSubtract(p2, p1), XMVectorSubtract(p1, p0)), objectMat));
 #ifdef GGREDUCED
@@ -5255,6 +5268,7 @@ OPTICK_EVENT();
 												result.vertexID2 = (int)i2;
 												result.bary = bary;
 												temp_closest_distance = distance;
+												iResultIndex = iObject;
 												if (ray.bIgnoreNearestTriangle)
 													bEarlyExit = true;
 #ifdef GGREDUCED
@@ -5312,7 +5326,7 @@ OPTICK_EVENT();
 								const XMVECTOR pos = XMVector3Transform(XMVectorAdd(rayOrigin_local, rayDirection_local * distance), objectMat);
 								distance = wiMath::Distance(pos, rayOrigin);
 
-								if (distance < result.distance)
+								if (distance < result.distance || (distance == result.distance && iObject < iResultIndex))
 								{
 									const XMVECTOR nor = XMVector3Normalize(XMVector3TransformNormal(XMVector3Cross(XMVectorSubtract(p2, p1), XMVectorSubtract(p1, p0)), objectMat));
 #ifdef GGREDUCED
@@ -5328,6 +5342,7 @@ OPTICK_EVENT();
 										result.vertexID1 = (int)i1;
 										result.vertexID2 = (int)i2;
 										result.bary = bary;
+										iResultIndex = iObject;
 										if (ray.bIgnoreNearestTriangle)
 											bEarlyExit = true;
 
