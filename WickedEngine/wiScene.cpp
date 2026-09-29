@@ -5049,6 +5049,81 @@ OPTICK_EVENT();
 #endif
 	}
 
+	PickResult PickObjects(const RAY& ray, const uint32_t* pObjectIndices, uint32_t count, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene)
+	{
+#ifdef REMOVE_THREAD_PICK
+
+		return Pick(ray, renderTypeMask, layerMask, scene);
+
+#else
+		PickResult result;
+
+		const XMVECTOR rayOrigin = XMLoadFloat3(&ray.origin);
+		const XMVECTOR rayDirection = XMVector3Normalize(XMLoadFloat3(&ray.direction));
+		std::atomic<float> closestDistance(FLT_MAX);
+
+		XMFLOAT3 dirNormalized;
+		XMStoreFloat3(&dirNormalized, rayDirection);
+
+		for (uint32_t k = 0; k < count; ++k)
+		{
+			const uint32_t i = pObjectIndices[k];
+			if (i >= scene.objects.GetCount() || i >= scene.aabb_objects.GetCount())
+			{
+				continue;
+			}
+			float fEntry;
+			if (!PickRayMeetsBox(ray, dirNormalized, scene.aabb_objects[i], fEntry) || fEntry > closestDistance)
+			{
+				continue;
+			}
+
+			const ObjectComponent& object = scene.objects[i];
+			if (object.meshID == INVALID_ENTITY || object.bDisableCollision)
+			{
+				continue;
+			}
+			if (!(renderTypeMask & object.GetRenderTypes()))
+			{
+				continue;
+			}
+#ifdef GGREDUCED
+			if (!object.IsRenderable())
+			{
+				continue;
+			}
+#endif
+
+			ThreadResult localResult = ProcessObjectPicking(i, object, scene, ray, renderTypeMask, layerMask, rayOrigin, rayDirection, closestDistance);
+			if (localResult.entity != INVALID_ENTITY && localResult.distance < result.distance)
+			{
+				result.entity = localResult.entity;
+				result.position = localResult.position;
+				result.normal = localResult.normal;
+				result.distance = localResult.distance;
+				result.subsetIndex = localResult.subsetIndex;
+				result.vertexID0 = localResult.vertexID0;
+				result.vertexID1 = localResult.vertexID1;
+				result.vertexID2 = localResult.vertexID2;
+				result.bary = localResult.bary;
+			}
+		}
+
+		if (result.entity != INVALID_ENTITY)
+		{
+			XMVECTOR N = XMLoadFloat3(&result.normal);
+			XMVECTOR P = XMLoadFloat3(&result.position);
+			XMVECTOR E = XMLoadFloat3(&ray.origin);
+			XMVECTOR T = XMVector3Normalize(XMVector3Cross(N, P - E));
+			XMVECTOR B = XMVector3Normalize(XMVector3Cross(T, N));
+			XMMATRIX M = { T, N, B, P };
+			XMStoreFloat4x4(&result.orientation, M);
+		}
+
+		return result;
+#endif
+	}
+
 	PickResult Pick(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene)
 	{
 		PickResult result;

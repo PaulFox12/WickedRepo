@@ -1675,6 +1675,9 @@ namespace wiScene
 	//	scene			:	the scene that will be traced against the ray
 	PickResult Pick(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
 	PickResult PickThread(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
+	// GG: Pick against only the given objects (indices into scene.objects), for a caller that already knows the few a short
+	// ray can meet: the same tests and triangle test as PickThread, on the calling thread
+	PickResult PickObjects(const RAY& ray, const uint32_t* pObjectIndices, uint32_t count, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
 	PickResult Pick_OLD(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
 
 	struct SceneIntersectSphereResult
