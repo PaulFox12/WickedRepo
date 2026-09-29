@@ -1082,8 +1082,10 @@ namespace wiScene
 
 #ifdef GGREDUCED
 		// GameGuru's decal modes (GGDecalHF.hlsli), set at run time and not serialized: from -1 up, the decal paints only
-		// surfaces facing along its Z by more than this cosine; below -1, every surface in its box
+		// surfaces facing along its Z by more than this cosine; below -1, every surface in its box. It fades in over
+		// facing_fade past it
 		float facing = -2.0f;
+		float facing_fade = 0.1f;
 		// a blast round the box's centre (then facing is towards the centre): triplanar over the sphere inside its box, the
 		// blend of the three planes sharpened by blend_sharpness, and occlusion holding how far the first surface lies along
 		// each of the box's six axes, 5 bits each

@@ -4974,13 +4974,15 @@ void UpdateRenderData(
 			entityArray[entityCounter].color = wiMath::CompressColor(XMFLOAT4(decal.color.x, decal.color.y, decal.color.z, decal.GetOpacity()));
 			entityArray[entityCounter].SetEnergy(decal.emissive);
 #ifdef GGREDUCED
-			// GameGuru's decal modes (GGDecalHF.hlsli): the facing cutoff goes in the cone angle slot, unused by decals, and a
+			// GameGuru's decal modes (GGDecalHF.hlsli): the facing cutoff goes in the cone angle slot, unused by decals, and its
+			// fade width in energy16_X16's free top 16 bits; a
 			// blast also carries its blend sharpness and its clip behind the surface hit in the direction slot, and where
 			// the first surfaces lie in userdata
 			if (decal.blast)
 			{
 				entityArray[entityCounter].SetFlags(ENTITY_FLAG_DECAL_BLAST);
 				entityArray[entityCounter].SetConeAngleCos(decal.facing);
+				entityArray[entityCounter].energy16_X16 |= (uint32_t)XMConvertFloatToHalf(decal.facing_fade) << 16;
 				entityArray[entityCounter].SetDirection(XMFLOAT3(decal.blend_sharpness, (float)decal.hit_direction, decal.hit_clip));
 				entityArray[entityCounter].userdata = decal.occlusion;
 			}
@@ -4988,6 +4990,7 @@ void UpdateRenderData(
 			{
 				entityArray[entityCounter].SetFlags(ENTITY_FLAG_DECAL_FACING);
 				entityArray[entityCounter].SetConeAngleCos(decal.facing);
+				entityArray[entityCounter].energy16_X16 |= (uint32_t)XMConvertFloatToHalf(decal.facing_fade) << 16;
 			}
 #endif
 

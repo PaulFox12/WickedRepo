@@ -4,8 +4,9 @@
 // GameGuru's projected decals, applied by the object shaders' decal loops (objectHF.hlsli) and the terrain's
 // (GGTerrainVirtualPBR_PS.hlsl) through GGDecalColor. A decal without a GameGuru flag is Wicked's planar decal, unchanged.
 // - ENTITY_FLAG_DECAL_FACING (wiRenderer.cpp, from DecalComponent::facing): paints only surfaces whose geometric normal
-//   faces along the decal's Z by more than the cosine in its cone angle slot, fading in over the next 0.1, so the inside
-//   face of a thin wall and the ground under an upright box stay clean
+//   faces along the decal's Z by more than the cosine in its cone angle slot, fading in (smoothstep) over the width in the
+//   top 16 bits of energy16_X16 (GGDecalFacingFade; 0.1 unless set), so the inside face of a thin wall and the ground under an
+//   upright box stay clean
 // - ENTITY_FLAG_DECAL_BLAST (from DecalComponent::blast): a blast round the decal's centre. Its box is a cube of half-size
 //   radius, and it paints the sphere inside it, fading out over the outer quarter, on every surface facing the centre by
 //   more than the cone angle cosine. Each surface takes the texture from the box's planes it faces most (triplanar), the
@@ -23,6 +24,15 @@
 // the geometric normal of the surface being shaded (before normal mapping), set by the pixel shader before its lighting
 static float3 decal_faceN = float3(0, 1, 0);
 
+// how a GameGuru decal fades in past its facing cutoff: 0 at the cutoff, full at the cutoff plus the width kept in the top
+// 16 bits of energy16_X16 (the emissive energy is the low 16)
+inline float GGDecalFacingBlend(in ShaderEntity decal, in float facing)
+{
+	const float cutoff = decal.GetConeAngleCos();
+	const float fade = max(f16tof32(decal.energy16_X16 >> 16), 0.001);
+	return smoothstep(cutoff, cutoff + fade, facing);
+}
+
 // one of a blast decal's three planes: the position and its gradients in the box's units (-1 to 1 across it)
 inline float4 GGBlastDecalSample(in float2 planePos, in float2 planeDX, in float2 planeDY, in float4 texMulAdd)
 {
@@ -36,12 +46,12 @@ inline float4 GGBlastDecalColor(in ShaderEntity decal, in float4x4 decalProjecti
 	edgeBlend = 0;
 	float4 decalColor = 0;
 
-	// the sphere, fading out over its outer quarter (none from its edge out), on surfaces facing the centre, fading in over
-	// the 0.1 past the cutoff
+	// the sphere, fading out over its outer quarter (none from its edge out), on surfaces facing the centre, fading in past
+	// the cutoff
 	const float3 toCentre = decal.position - P;
 	const float lenToCentre = length(toCentre);
 	const float facing = lenToCentre > 0.001 ? dot(decal_faceN, toCentre) / lenToCentre : 1;
-	float blend = (1 - smoothstep(0.75, 1, length(boxPos))) * saturate((facing - decal.GetConeAngleCos()) * 10);
+	float blend = (1 - smoothstep(0.75, 1, length(boxPos))) * GGDecalFacingBlend(decal, facing);
 
 	// nothing behind the first surface along the box's axis nearest the point's direction from the centre
 	const float3 absPos = abs(boxPos);
@@ -124,7 +134,7 @@ inline float4 GGDecalColor(in ShaderEntity decal, in float3 P, in float3 P_dx, i
 		{
 			// the decal's Z in world space is the gradient of its box's z
 			const float facing = dot(decal_faceN, normalize(decalProjection[2].xyz));
-			facingBlend = saturate((facing - decal.GetConeAngleCos()) * 10);
+			facingBlend = GGDecalFacingBlend(decal, facing);
 		}
 		[branch]
 		if (is_saturated(uvw) && facingBlend > 0)
