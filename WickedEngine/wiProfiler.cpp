@@ -34,7 +34,12 @@ namespace wiProfiler
 	std::recursive_mutex lock;
 	range_id cpu_frame;
 	range_id gpu_frame;
+#ifdef GGREDUCED
+	// GG: read back four frames late rather than two, past the frames the GPU may still be working on
+	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 3];
+#else
 	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 1];
+#endif
 	std::vector<uint64_t> queryResults;
 	std::atomic<uint32_t> nextQuery{ 0 };
 	uint32_t writtenQueries[arraysize(queryHeap)] = {};
@@ -131,6 +136,11 @@ namespace wiProfiler
 		queryheap_idx = (queryheap_idx + 1) % arraysize(queryHeap);
 		if (writtenQueries[queryheap_idx] > 0)
 		{
+#ifdef GGREDUCED
+			// GG: QueryRead leaves a query that isn't ready untouched, and the results are shared by every heap, so it
+			// kept another frame's (often another range's) timestamp; mark them all unread first
+			for (uint32_t i = 0; i < writtenQueries[queryheap_idx]; ++i) queryResults[i] = UINT64_MAX;
+#endif
 			wiRenderer::GetDevice()->QueryRead(&queryHeap[queryheap_idx], 0, writtenQueries[queryheap_idx], queryResults.data());
 		}
 
@@ -153,15 +163,18 @@ namespace wiProfiler
 				int end_query = range.gpuEnd[queryheap_idx];
 				if (begin_query >= 0 && end_query >= 0)
 				{
-					uint64_t begin_result = queryResults[begin_query];
-					uint64_t end_result = queryResults[end_query];
 #ifdef GGREDUCED
-					// a query the GPU has not written yet keeps an old result (QueryRead does not wait), and end - begin
-					// would then wrap round to a huge time, which spoils the average for as many frames as it takes; such
-					// a sample is skipped and the range keeps its last time
-					if (end_result <= begin_result)
+					// a query outside what this heap wrote, or not ready when read, has no result for this frame; such a
+					// sample is skipped and the range keeps its last time
+					uint32_t written = writtenQueries[queryheap_idx];
+					uint64_t begin_result = (uint32_t)begin_query < written ? queryResults[begin_query] : UINT64_MAX;
+					uint64_t end_result = (uint32_t)end_query < written ? queryResults[end_query] : UINT64_MAX;
+					if (begin_result == UINT64_MAX || end_result == UINT64_MAX || end_result <= begin_result)
 						skip_sample = true;
 					else
+#else
+					uint64_t begin_result = queryResults[begin_query];
+					uint64_t end_result = queryResults[end_query];
 #endif
 					range.time = (float)abs((double)(end_result - begin_result) / gpu_frequency);
 				}
@@ -511,6 +524,12 @@ namespace wiProfiler
 			initialized = false;
 			ranges.clear();
 			for( int i = 0; i < COMMANDLIST_COUNT+1; i++ ) rangeOrder[i].clear();
+#ifdef GGREDUCED
+			// GG: the heaps are made again, so nothing written before counts
+			for (int i = 0; i < arraysize(writtenQueries); ++i) writtenQueries[i] = 0;
+			nextQuery.store(0);
+			queryheap_idx = 0;
+#endif
 			ENABLED = value;
 		}
 	}
