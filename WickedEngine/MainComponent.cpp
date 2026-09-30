@@ -198,7 +198,10 @@ void MainComponent::Run()
 		deltaTimeAccumulator = 0;
 	}
 
+	// GG: the rest of the frame timed too, so a hitch outside the update and render ranges shows where it is
+	auto rangeInput = wiProfiler::BeginRangeCPU("Input");
 	wiInput::Update(window);
+	wiProfiler::EndRange(rangeInput);
 
 	#ifdef GGREDUCED
 	if (is_completely_loaded == false)
@@ -208,8 +211,10 @@ void MainComponent::Run()
 	else
 	{
 	#endif
+	auto rangeSwapchain = wiProfiler::BeginRangeCPU("Swapchain");
 	CommandList cmd = wiRenderer::GetDevice()->BeginCommandList(QUEUE_GRAPHICS, "Swapchain");
 	wiRenderer::GetDevice()->RenderPassBegin(&swapChain, cmd);
+	wiProfiler::EndRange(rangeSwapchain);
 	{
 		wiImage::SetCanvas(canvas, cmd);
 		wiFont::SetCanvas(canvas, cmd);
@@ -226,7 +231,11 @@ void MainComponent::Run()
 		OPTICK_EVENT("wiRenderer::SubmitCommandLists");
 #endif
 #endif
+		// GG: submitting the frame's command lists and presenting it, which waits while the GPU is too far behind; after
+		// the profiler's EndFrame, so it counts in the next frame's times and is not part of "CPU Frame"
+		auto rangeSubmit = wiProfiler::BeginRangeCPU("Submit");
 		wiRenderer::GetDevice()->SubmitCommandLists();
+		wiProfiler::EndRange(rangeSubmit);
 	}
 	#ifdef GGREDUCED
 	}
