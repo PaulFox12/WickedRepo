@@ -7016,7 +7016,8 @@ void DrawShadowmaps(
 							wiProfiler::EndRange(range2);
 
 							//PE: Make more room. Trees dont use cascade 3-4
-							if (cascade < 3)
+							// GG: cascade 3 too (7500-30000 deep) when the tree shadow range asks for it, for billboard shadows far out
+							if (cascade < 4)
 							{
 								sprintf_s(profileName, "Shadow Rendering - Trees %d", cascade);
 								range2 = wiProfiler::BeginRangeGPU(profileName, cmd);
