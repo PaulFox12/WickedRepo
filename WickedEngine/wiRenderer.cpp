@@ -43,6 +43,8 @@
 #ifdef SHADERCOMPILER
 bool g_bNoTerrainRender = false;
 float fWickedCallShadowFarPlane = 500000;
+uint32_t g_iWickedShadowCascades = 5;
+float g_fWickedShadowSplits[4] = { 380.0f, 950.0f, 7500.0f, 30000.0f };
 float fWickedMaxCenterTest = 0.0;
 bool g_bDelayedShadows = true;
 bool g_bDelayedShadowsLaptop = true;
@@ -73,6 +75,10 @@ bool bReflectionsLowestLOD = false;
 #include "timeapi.h"
 extern float fWickedMaxCenterTest;
 extern float fWickedCallShadowFarPlane;
+// GG: the sun's shadow cascades in use (1 to 5) and the view depths the first four end at, set by the game
+// (SetShadowCascades); a pixel past the last one in use is lit
+extern uint32_t g_iWickedShadowCascades;
+extern float g_fWickedShadowSplits[4];
 extern float fLODMultiplier;
 extern bool g_bNoTerrainRender;
 extern bool g_bDelayedShadows;
@@ -3114,10 +3120,11 @@ inline void CreateDirLightShadowCams(const LightComponent& light, CameraComponen
 
 		//PE: Only bias per cascade can fix light leak problems.
 		referenceSplitClamp * 0.0f,    // near plane
-		referenceSplitClamp * 380.0f * invFar,		// near-mid1 split YELLOW (60 fps)
-		referenceSplitClamp * 950.0f * invFar,		// mid1-mid2 split GREEN (30 fps)
-		referenceSplitClamp * 7500 * invFar,		// mid2-mid3 split NONE (20 fps)
-		referenceSplitClamp * 30000 * invFar,		// mid3-far split RED (Not in terrain). (15 fps)
+		// GG: 380, 950, 7500 and 30000 unless the game sets them (g_fWickedShadowSplits)
+		referenceSplitClamp * g_fWickedShadowSplits[0] * invFar,		// near-mid1 split YELLOW (60 fps)
+		referenceSplitClamp * g_fWickedShadowSplits[1] * invFar,		// mid1-mid2 split GREEN (30 fps)
+		referenceSplitClamp * g_fWickedShadowSplits[2] * invFar,		// mid2-mid3 split NONE (20 fps)
+		referenceSplitClamp * g_fWickedShadowSplits[3] * invFar,		// mid3-far split RED (Not in terrain). (15 fps)
 		referenceSplitClamp * 1,					// far plane CYAN (Not in terrain). (12 fps)
 
 
@@ -4646,7 +4653,11 @@ void UpdatePerFrameData(
 		frameCB.g_xFrame_Ambient = XMFLOAT3(0.27f, 0.27f, 0.27f);
 	}
 	frameCB.g_xFrame_SunDirection = vis.scene->weather.sunDirection;
+#ifdef GGREDUCED
+	frameCB.g_xFrame_ShadowCascadeCount = std::max(1u, std::min(g_iWickedShadowCascades, (uint32_t)CASCADE_COUNT));
+#else
 	frameCB.g_xFrame_ShadowCascadeCount = CASCADE_COUNT;
+#endif
 	frameCB.g_xFrame_Cloudiness = vis.scene->weather.cloudiness;
 	frameCB.g_xFrame_CloudScale = vis.scene->weather.cloudScale;
 	frameCB.g_xFrame_CloudSpeed = vis.scene->weather.cloudSpeed;
@@ -6944,6 +6955,8 @@ void DrawShadowmaps(
 				for (uint32_t cascade = 0; cascade < CASCADE_COUNT; ++cascade)
 				{
 					#ifdef GGREDUCED
+					// GG: a cascade past those in use isn't drawn (the lighting shader stops at the count)
+					if (cascade >= g_iWickedShadowCascades) continue;
 					#ifdef DELAYEDSHADOWS
 					if(bUpdateCascade[cascade])
 					#endif
