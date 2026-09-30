@@ -35,8 +35,9 @@ namespace wiProfiler
 	range_id cpu_frame;
 	range_id gpu_frame;
 #ifdef GGREDUCED
-	// GG: read back four frames late rather than two, past the frames the GPU may still be working on
-	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 3];
+	// GG: read back eight frames late rather than two, past the frames the GPU may still be working on (four was not enough
+	// when the GPU is the bottleneck)
+	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 7];
 #else
 	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 1];
 #endif
@@ -53,6 +54,9 @@ namespace wiProfiler
 		int avg_counter = 0;
 		float time = 0;
 		float peek = 0;
+#ifdef GGREDUCED
+		int stale = 0; // GG: frames since a GPU range last had a result; its time is the older one meanwhile
+#endif
 		CommandList cmd = COMMANDLIST_COUNT;
 
 		wiTimer cpuBegin, cpuEnd;
@@ -185,9 +189,11 @@ namespace wiProfiler
 			if (skip_sample)
 			{
 				range.time = previous_time;
+				range.stale++;
 				range.in_use = false;
 				continue;
 			}
+			range.stale = 0;
 #endif
 			range.times[range.avg_counter++ % arraysize(range.times)] = range.time;
 
@@ -312,9 +318,10 @@ namespace wiProfiler
 
 	// the time of the first range with this name ("GPU Frame", "CPU Frame", ...) in ms, averaged over the last frames; -1 while
 	// profiling is off or until the range has been timed for as many frames as the average takes (the first GPU results
-	// arrive some frames late)
-	float GetRangeTime(const char* name)
+	// arrive some frames late). pStaleFrames, if given, gets how many frames the time has gone without a new result
+	float GetRangeTime(const char* name, int* pStaleFrames)
 	{
+		if (pStaleFrames) *pStaleFrames = 0;
 		if (!ENABLED || !initialized || !name)
 			return -1;
 
@@ -324,6 +331,7 @@ namespace wiProfiler
 		if (it != ranges.end() && it->second.avg_counter > arraysize(it->second.times))
 		{
 			time = it->second.time;
+			if (pStaleFrames) *pStaleFrames = it->second.stale;
 		}
 		lock.unlock();
 		return time;

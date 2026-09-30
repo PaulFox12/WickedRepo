@@ -49,7 +49,7 @@ namespace wiProfiler
 	int GetFrustumCulled(void);
 	void SetFrustumCulled(int iFrustum);
 
-	float GetRangeTime(const char* name);
+	float GetRangeTime(const char* name, int* pStaleFrames = nullptr);
 
 	void ResetPeek (void);
 
