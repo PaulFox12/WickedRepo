@@ -1673,7 +1673,9 @@ namespace wiScene
 	//	renderTypeMask	:	filter based on render type
 	//	layerMask		:	filter based on layer
 	//	scene			:	the scene that will be traced against the ray
-	PickResult Pick(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
+	// GG: pExclude lists up to excludeCount object entities the ray passes through, so a caller off the main thread need not
+	// change their layers to leave them out
+	PickResult Pick(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene(), const wiECS::Entity* pExclude = nullptr, uint32_t excludeCount = 0);
 	PickResult PickThread(const RAY& ray, uint32_t renderTypeMask = RENDERTYPE_OPAQUE, uint32_t layerMask = ~0, const Scene& scene = GetScene());
 	// GG: Pick against only the given objects (indices into scene.objects), for a caller that already knows the few a short
 	// ray can meet: the same tests and triangle test as PickThread, on the calling thread

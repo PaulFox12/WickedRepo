@@ -4990,7 +4990,7 @@ OPTICK_EVENT();
 	};
 
 	// GG: the objects a pick ray may hit, nearest box first (only those in pObjectIndices when given)
-	static void PickGatherCandidates(const RAY& ray, const XMFLOAT3& dirNormalized, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, bool bSkipCollisionOff, const uint32_t* pObjectIndices, uint32_t count, std::vector<PickCandidate>& candidates)
+	static void PickGatherCandidates(const RAY& ray, const XMFLOAT3& dirNormalized, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, bool bSkipCollisionOff, const uint32_t* pObjectIndices, uint32_t count, const Entity* pExclude, uint32_t excludeCount, std::vector<PickCandidate>& candidates)
 	{
 		const size_t objectCount = std::min(scene.objects.GetCount(), scene.aabb_objects.GetCount());
 		const size_t total = pObjectIndices ? count : objectCount;
@@ -5022,8 +5022,18 @@ OPTICK_EVENT();
 				continue;
 			}
 #endif
-			const LayerComponent* layer = scene.layers.GetComponent(scene.aabb_objects.GetEntity(i));
+			const Entity entity = scene.aabb_objects.GetEntity(i);
+			const LayerComponent* layer = scene.layers.GetComponent(entity);
 			if (layer != nullptr && !(layer->GetLayerMask() & layerMask))
+			{
+				continue;
+			}
+			bool bExcluded = false;
+			for (uint32_t e = 0; e < excludeCount && !bExcluded; ++e)
+			{
+				bExcluded = pExclude[e] == entity;
+			}
+			if (bExcluded)
 			{
 				continue;
 			}
@@ -5053,7 +5063,7 @@ OPTICK_EVENT();
 		// GG: nearest boxes first. A first wave the pool's size (this thread takes the nearest) usually finds the hit;
 		// the rest are then queued together, each skipped at its start if its box begins beyond the best hit so far
 		std::vector<PickCandidate> candidates;
-		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, nullptr, 0, candidates);
+		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, nullptr, 0, nullptr, 0, candidates);
 		static const size_t waveSize = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 1;
 		uint32_t iResultIndex = UINT32_MAX;
 		std::vector<std::future<ThreadResult>> futures;
@@ -5130,7 +5140,7 @@ OPTICK_EVENT();
 
 		// GG: nearest box first, stopping at the first box that starts beyond the best hit
 		std::vector<PickCandidate> candidates;
-		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, pObjectIndices, count, candidates);
+		PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, true, pObjectIndices, count, nullptr, 0, candidates);
 		uint32_t iResultIndex = UINT32_MAX;
 		for (const PickCandidate& candidate : candidates)
 		{
@@ -5157,7 +5167,7 @@ OPTICK_EVENT();
 #endif
 	}
 
-	PickResult Pick(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene)
+	PickResult Pick(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, const Entity* pExclude, uint32_t excludeCount)
 	{
 		PickResult result;
 
@@ -5170,7 +5180,7 @@ OPTICK_EVENT();
 			
 			// GG: nearest box first, stopping at the first box that starts beyond the best hit
 			std::vector<PickCandidate> candidates;
-			PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, false, nullptr, 0, candidates);
+			PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, false, nullptr, 0, pExclude, excludeCount, candidates);
 			uint32_t iResultIndex = UINT32_MAX;
 			for (const PickCandidate& candidate : candidates)
 			{
