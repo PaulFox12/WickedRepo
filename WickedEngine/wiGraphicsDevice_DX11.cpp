@@ -2775,6 +2775,9 @@ void GraphicsDevice_DX11::Map(const GPUResource* resource, Mapping* mapping) con
 		{
 			map_type = D3D11_MAP_READ;
 		}
+#ifdef GGREDUCED
+		if (!(mapping->_flags & Mapping::FLAG_WAIT))
+#endif
 		map_flags |= D3D11_MAP_FLAG_DO_NOT_WAIT;
 	}
 	else if (mapping->_flags & Mapping::FLAG_WRITE)

@@ -748,6 +748,9 @@ namespace wiGraphics
 			FLAG_EMPTY = 0,
 			FLAG_READ = 1 << 0,
 			FLAG_WRITE = 1 << 1,
+#ifdef GGREDUCED
+			FLAG_WAIT = 1 << 2, // GG: a read waits for the GPU instead of failing while the resource is still in use
+#endif
 		};
 		uint32_t _flags = FLAG_EMPTY;
 		size_t offset = 0;
