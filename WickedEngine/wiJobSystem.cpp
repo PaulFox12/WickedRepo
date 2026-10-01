@@ -58,6 +58,14 @@ namespace wiJobSystem
 		return false;
 	}
 
+#ifdef GGREDUCED
+	static int affinityMode = 0;
+	void SetAffinityMode(int mode)
+	{
+		affinityMode = mode;
+	}
+#endif
+
 	void Initialize()
 	{
 		// Retrieve the number of hardware threads in this system:
@@ -86,10 +94,20 @@ namespace wiJobSystem
 			// Do Windows-specific thread setup:
 			HANDLE handle = (HANDLE)worker.native_handle();
 
+#ifdef GGREDUCED
+			if (affinityMode == 1)
+			{
+				// GG: the core as a preference, so the scheduler can move the worker
+				SetThreadIdealProcessor(handle, threadID);
+			}
+			else if (affinityMode == 0)
+#endif
+			{
 			// Put each thread on to dedicated core:
 			DWORD_PTR affinityMask = 1ull << threadID;
 			DWORD_PTR affinity_result = SetThreadAffinityMask(handle, affinityMask);
 			assert(affinity_result > 0);
+			}
 
 			//// Increase thread priority:
 			//BOOL priority_result = SetThreadPriority(handle, THREAD_PRIORITY_HIGHEST);
@@ -104,7 +122,11 @@ namespace wiJobSystem
 			worker.detach();
 		}
 
+#ifdef GGREDUCED
+		wiBackLog::post(("wiJobSystem Initialized with [" + std::to_string(numCores) + " cores] [" + std::to_string(numThreads) + " threads] [affinity mode " + std::to_string(affinityMode) + "]").c_str());
+#else
 		wiBackLog::post(("wiJobSystem Initialized with [" + std::to_string(numCores) + " cores] [" + std::to_string(numThreads) + " threads]").c_str());
+#endif
 	}
 
 	uint32_t GetThreadCount()
