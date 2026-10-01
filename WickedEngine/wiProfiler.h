@@ -79,5 +79,9 @@ namespace wiProfiler
 extern void (*g_pfnWickedProfilerQueries)(uint32_t queries);
 extern void (*g_pfnWickedProfilerLockWait)(double dMilliseconds);
 extern void (*g_pfnWickedProfilerLockHold)(double dMilliseconds);
+// GG: when set, told the main thread's CPU ranges whether or not profiling is on (the game's frame phase probe): each range's
+// own time, without the ranges inside it, and its parents innermost first ("B < A"); and once a frame the time outside every
+// range, named "outside ranges"
+extern void (*g_pfnWickedFramePhase)(const char* name, const char* parents, double dMilliseconds);
 #endif
 

@@ -6,7 +6,7 @@
 
 #ifdef GGREDUCED
 // GG: a device call reported to g_pfnWickedDeviceCall (set by the game, for its stall probes): call 0 a buffer or texture
-// made, 1 a map, unmap or buffer update, 2 a present
+// made, 1 a map, unmap or buffer update, 2 a present, 3 a shader, pipeline state or sampler made
 struct WickedDeviceCallInfo
 {
 	int call = 0;

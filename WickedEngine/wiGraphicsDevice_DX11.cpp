@@ -32,7 +32,8 @@ extern "C" {
 using namespace Microsoft::WRL;
 
 #ifdef GGREDUCED
-// GG: when set, told how long each buffer or texture creation, map, unmap, buffer update and present took, in milliseconds,
+// GG: when set, told how long each buffer, texture, shader, pipeline state or sampler creation, map, unmap, buffer update
+// and present took, in milliseconds,
 // on whichever thread made it (a probe for frame stalls inside the driver)
 void (*g_pfnWickedDeviceCall)(double dMilliseconds, const WickedDeviceCallInfo& info) = nullptr;
 struct WickedDeviceCallTimer
@@ -1907,6 +1908,10 @@ bool GraphicsDevice_DX11::CreateTexture(const TextureDesc* pDesc, const Subresou
 }
 bool GraphicsDevice_DX11::CreateShader(SHADERSTAGE stage, const void *pShaderBytecode, size_t BytecodeLength, Shader *pShader) const
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(3, "CreateShader");
+	callTimer.info.bytes = BytecodeLength;
+#endif
 	pShader->stage = stage;
 
 	HRESULT hr = E_FAIL;
@@ -1965,6 +1970,9 @@ bool GraphicsDevice_DX11::CreateShader(SHADERSTAGE stage, const void *pShaderByt
 }
 bool GraphicsDevice_DX11::CreateSampler(const SamplerDesc *pSamplerDesc, Sampler *pSamplerState) const
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(3, "CreateSampler");
+#endif
 	auto internal_state = std::make_shared<Sampler_DX11>();
 	pSamplerState->internal_state = internal_state;
 
@@ -2111,6 +2119,9 @@ bool GraphicsDevice_DX11::CreateQueryHeapSOFT(const GPUQueryHeapDesc* pDesc, GPU
 
 bool GraphicsDevice_DX11::CreatePipelineState(const PipelineStateDesc* pDesc, PipelineState* pso) const
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(3, "CreatePipelineState");
+#endif
 	auto internal_state = std::make_shared<PipelineState_DX11>();
 	pso->internal_state = internal_state;
 

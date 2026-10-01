@@ -21,6 +21,7 @@ using namespace wiGraphics;
 void (*g_pfnWickedProfilerQueries)(uint32_t queries) = nullptr;
 void (*g_pfnWickedProfilerLockWait)(double dMilliseconds) = nullptr;
 void (*g_pfnWickedProfilerLockHold)(double dMilliseconds) = nullptr;
+void (*g_pfnWickedFramePhase)(const char* name, const char* parents, double dMilliseconds) = nullptr;
 #endif
 
 namespace wiProfiler
@@ -75,6 +76,101 @@ namespace wiProfiler
 	void LockRanges() { lock.lock(); }
 	void UnlockRanges() { lock.unlock(); }
 #endif
+#ifdef GGREDUCED
+	// GG: the main thread's CPU ranges timed whether or not profiling is on, without the lock (that thread only): each range's
+	// own time goes to g_pfnWickedFramePhase, and its whole time to an average by name, which GetRangeTime answers while
+	// profiling is off
+	struct PhaseRange
+	{
+		range_id id = 0;
+		char name[64] = "";
+		double begin = 0;
+		double inner = 0; // the time of the ranges inside it
+	};
+	struct PhaseTime
+	{
+		double frame = 0;
+		float times[20] = {};
+		int avg_counter = 0;
+		float time = 0;
+	};
+	thread_local bool phaseThread = false; // the thread that calls BeginFrame
+	PhaseRange phaseStack[32];
+	int phaseDepth = 0;
+	double phaseFrameBegin = 0;
+	double phaseOutermost = 0; // this frame's ranges with no parent
+	bool phaseOutsideValid = false;
+	std::unordered_map<size_t, PhaseTime> phaseTimes;
+
+	double PhaseNow()
+	{
+		return std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+	}
+	void PhaseBegin(range_id id, const char* name)
+	{
+		if (phaseDepth >= (int)arraysize(phaseStack))
+			return;
+		PhaseRange& phase = phaseStack[phaseDepth++];
+		phase.id = id;
+		strncpy_s(phase.name, name, _TRUNCATE);
+		phase.inner = 0;
+		phase.begin = PhaseNow();
+	}
+	void PhaseEnd(range_id id)
+	{
+		double now = PhaseNow();
+		int i = phaseDepth - 1;
+		while (i >= 0 && phaseStack[i].id != id)
+			i--;
+		if (i < 0)
+			return; // not a CPU range timed here (a GPU range, or one begun before the first frame)
+		PhaseRange& phase = phaseStack[i];
+		double total = now - phase.begin;
+		if (i > 0)
+			phaseStack[i - 1].inner += total;
+		else
+			phaseOutermost += total;
+		phaseTimes[wiHelper::string_hash(phase.name)].frame += total;
+		if (g_pfnWickedFramePhase)
+		{
+			char parents[200] = "";
+			for (int p = i - 1; p >= 0 && p >= i - 3; p--)
+			{
+				if (p < i - 1)
+					strncat_s(parents, " < ", _TRUNCATE);
+				strncat_s(parents, phaseStack[p].name, _TRUNCATE);
+			}
+			g_pfnWickedFramePhase(phase.name, parents, total - phase.inner);
+		}
+		phaseDepth = i; // a range left open inside it is dropped
+	}
+	void PhaseFrame()
+	{
+		phaseThread = true;
+		double now = PhaseNow();
+		if (phaseOutsideValid && phaseDepth == 0 && g_pfnWickedFramePhase)
+		{
+			g_pfnWickedFramePhase("outside ranges", "", now - phaseFrameBegin - phaseOutermost);
+		}
+		phaseFrameBegin = now;
+		phaseOutermost = 0;
+		phaseOutsideValid = phaseDepth == 0; // a frame begun inside a range (a nested Run) has no outside time
+		for (auto& it : phaseTimes)
+		{
+			PhaseTime& phaseTime = it.second;
+			phaseTime.times[phaseTime.avg_counter++ % arraysize(phaseTime.times)] = (float)phaseTime.frame;
+			phaseTime.frame = 0;
+			if (phaseTime.avg_counter > arraysize(phaseTime.times))
+			{
+				float sum = 0;
+				for (int t = 0; t < arraysize(phaseTime.times); ++t)
+					sum += phaseTime.times[t];
+				phaseTime.time = sum / arraysize(phaseTime.times);
+			}
+		}
+	}
+#endif
+
 	range_id cpu_frame;
 	range_id gpu_frame;
 #ifdef GGREDUCED
@@ -115,6 +211,8 @@ namespace wiProfiler
 	void BeginFrame()
 	{
 #ifdef GGREDUCED
+		PhaseFrame();
+
 		// the draw call and polygon counts are taken every frame, as the renderer counts whether or not profiling is on
 		// (before, with it off they were never reset, so they only grew)
 		iOldDrawCalls = iDrawCalls;
@@ -167,6 +265,13 @@ namespace wiProfiler
 	}
 	void EndFrame(CommandList cmd)
 	{
+#ifdef GGREDUCED
+		if ((!ENABLED || !initialized) && phaseThread && phaseFrameBegin > 0)
+		{
+			// GG: "CPU Frame" for GetRangeTime while profiling is off, timed as the profiler times it (BeginFrame to EndFrame)
+			phaseTimes[wiHelper::string_hash("CPU Frame")].frame += PhaseNow() - phaseFrameBegin;
+		}
+#endif
 		if (!ENABLED || !initialized)
 			return;
 
@@ -279,7 +384,17 @@ namespace wiProfiler
 	range_id BeginRangeCPU(const char* name)
 	{
 		if (!ENABLED || !initialized)
+		{
+#ifdef GGREDUCED
+			if (phaseThread && name)
+			{
+				range_id id = wiHelper::string_hash(name);
+				PhaseBegin(id, name);
+				return id;
+			}
+#endif
 			return 0;
+		}
 
 		range_id id = wiHelper::string_hash(name);
 
@@ -298,6 +413,11 @@ namespace wiProfiler
 		ranges[id].cpuBegin.record();
 
 		UnlockRanges();
+
+#ifdef GGREDUCED
+		if (phaseThread)
+			PhaseBegin(id, name);
+#endif
 
 		return id;
 	}
@@ -340,6 +460,10 @@ namespace wiProfiler
 	}
 	void EndRange(range_id id)
 	{
+#ifdef GGREDUCED
+		if (phaseThread && id != 0)
+			PhaseEnd(id);
+#endif
 		if (!ENABLED || !initialized)
 			return;
 #ifdef GGREDUCED
@@ -406,10 +530,21 @@ namespace wiProfiler
 
 	// the time of the first range with this name ("GPU Frame", "CPU Frame", ...) in ms, averaged over the last frames; -1 while
 	// profiling is off or until the range has been timed for as many frames as the average takes (the first GPU results
-	// arrive some frames late). pStaleFrames, if given, gets how many frames the time has gone without a new result
+	// arrive some frames late). pStaleFrames, if given, gets how many frames the time has gone without a new result.
+	// While profiling is off, a CPU range on the main thread is answered from the frame phase timing: all of the frame's
+	// ranges with that name, averaged over the last frames (GPU ranges -1)
 	float GetRangeTime(const char* name, int* pStaleFrames)
 	{
 		if (pStaleFrames) *pStaleFrames = 0;
+#ifdef GGREDUCED
+		if ((!ENABLED || !initialized) && name && phaseThread)
+		{
+			auto it = phaseTimes.find(wiHelper::string_hash(name));
+			if (it != phaseTimes.end() && it->second.avg_counter > arraysize(it->second.times))
+				return it->second.time;
+			return -1;
+		}
+#endif
 		if (!ENABLED || !initialized || !name)
 			return -1;
 
