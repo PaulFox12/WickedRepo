@@ -31,6 +31,26 @@ extern "C" {
 
 using namespace Microsoft::WRL;
 
+#ifdef GGREDUCED
+// GG: when set, told how long each buffer or texture creation took, in milliseconds, on whichever thread made it (a probe
+// for frame stalls inside the driver)
+void (*g_pfnWickedResourceCreated)(double dMilliseconds) = nullptr;
+struct WickedResourceCreateTimer
+{
+	LARGE_INTEGER start;
+	WickedResourceCreateTimer() { QueryPerformanceCounter(&start); }
+	~WickedResourceCreateTimer()
+	{
+		if (!g_pfnWickedResourceCreated) return;
+		static LARGE_INTEGER freq = {};
+		if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
+		LARGE_INTEGER end;
+		QueryPerformanceCounter(&end);
+		g_pfnWickedResourceCreated((double)(end.QuadPart - start.QuadPart) * 1000.0 / (double)freq.QuadPart);
+	}
+};
+#endif
+
 namespace wiGraphics
 {
 
@@ -1747,6 +1767,9 @@ void* GraphicsDevice_DX11::MaterialGetSRV(void* resource)
 
 bool GraphicsDevice_DX11::CreateBuffer(const GPUBufferDesc *pDesc, const SubresourceData* pInitialData, GPUBuffer *pBuffer) const
 {
+#ifdef GGREDUCED
+	WickedResourceCreateTimer createTimer;
+#endif
 	auto internal_state = std::make_shared<Resource_DX11>();
 	pBuffer->internal_state = internal_state;
 	pBuffer->type = GPUResource::GPU_RESOURCE_TYPE::BUFFER;
@@ -1786,6 +1809,9 @@ bool GraphicsDevice_DX11::CreateBuffer(const GPUBufferDesc *pDesc, const Subreso
 }
 bool GraphicsDevice_DX11::CreateTexture(const TextureDesc* pDesc, const SubresourceData *pInitialData, Texture *pTexture) const
 {
+#ifdef GGREDUCED
+	WickedResourceCreateTimer createTimer;
+#endif
 	auto internal_state = std::make_shared<Texture_DX11>();
 	pTexture->internal_state = internal_state;
 	pTexture->type = GPUResource::GPU_RESOURCE_TYPE::TEXTURE;
