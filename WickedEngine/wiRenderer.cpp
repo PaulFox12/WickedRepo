@@ -43,6 +43,7 @@
 #ifdef SHADERCOMPILER
 bool g_bNoTerrainRender = false;
 float fWickedCallShadowFarPlane = 500000;
+bool g_bShadowJobWaits = false;
 uint32_t g_iWickedShadowCascades = 5;
 float g_fWickedShadowSplits[4] = { 380.0f, 950.0f, 7500.0f, 30000.0f };
 float fWickedMaxCenterTest = 0.0;
@@ -6961,6 +6962,9 @@ void DrawShadowmaps(
 					if(bUpdateCascade[cascade])
 					#endif
 					{
+					// GG: each cascade's CPU time (the render queue, the objects' and GGTerrain's and GGTrees' draws)
+					static const char* pCascadeRanges[CASCADE_COUNT] = { "Shadows - Cascade 0", "Shadows - Cascade 1", "Shadows - Cascade 2", "Shadows - Cascade 3", "Shadows - Cascade 4" };
+					wiProfiler::ScopedRangeCPU rangeCascade(pCascadeRanges[cascade]);
 					#endif
 						RenderQueue renderQueue;
 						bool transparentShadowsRequested = false;

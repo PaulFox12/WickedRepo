@@ -25,6 +25,14 @@ namespace wiProfiler
 	void DrawData(const wiCanvas& canvas, float x, float y, wiGraphics::CommandList cmd);
 
 #ifdef GGREDUCED
+	// GG: a CPU range over the scope it is declared in (a render job, a wait), so an early return still ends it
+	struct ScopedRangeCPU
+	{
+		range_id id;
+		ScopedRangeCPU(const char* name) : id(BeginRangeCPU(name)) {}
+		~ScopedRangeCPU() { EndRange(id); }
+	};
+
 	std::string GetProfilerData(void);
 	std::string GetProfilerDataFilter(char* filter);
 

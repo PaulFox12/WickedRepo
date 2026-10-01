@@ -994,11 +994,13 @@ void RenderPath3D::Render(int mode) const
 #ifdef DELAYEDSHADOWS
 	extern bool g_bDelayedShadows;
 	wiJobSystem::Execute(ctx, [this, cmd](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Frame Set Up"); // GG
 		RenderFrameSetUp(cmd);
 		});
 #else
 
 	wiJobSystem::Execute(ctx, [this, cmd](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Frame Set Up"); // GG
 		RenderFrameSetUp(cmd);
 		});
 #endif
@@ -1010,6 +1012,7 @@ void RenderPath3D::Render(int mode) const
 		cmd = device->BeginCommandList(QUEUE_GRAPHICS, "UpdateRaytracingAccelerationStructures");
 		device->WaitCommandList(cmd, cmd_prepareframe);
 		wiJobSystem::Execute(ctx, [this, cmd](wiJobArgs args) {
+			wiProfiler::ScopedRangeCPU rangeJob("Render Job - Raytracing"); // GG
 
 			wiRenderer::UpdateRaytracingAccelerationStructures(*scene, cmd);
 
@@ -1031,6 +1034,7 @@ void RenderPath3D::Render(int mode) const
 	cmd = device->BeginCommandList(QUEUE_GRAPHICS, "OpaqueZPrepass");
 	CommandList cmd_maincamera_prepass = cmd;
 	wiJobSystem::Execute(ctx, [this, cmd, previousCamera, mode](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Prepass"); // GG
 
 		GraphicsDevice* device = wiRenderer::GetDevice();
 
@@ -1099,6 +1103,7 @@ void RenderPath3D::Render(int mode) const
 	device->WaitCommandList(cmd, cmd_maincamera_prepass);
 	CommandList cmd_maincamera_compute_effects = cmd;
 	wiJobSystem::Execute(ctx, [this, cmd, previousCamera, cloudIndex](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Depth Pyramid And Culling"); // GG
 
 		GraphicsDevice* device = wiRenderer::GetDevice();
 
@@ -1227,13 +1232,20 @@ void RenderPath3D::Render(int mode) const
 
 	// Shadow maps:
 #ifdef DELAYEDSHADOWS
-	if (g_bDelayedShadows) //PE: dependencies.
+	// GG: g_bShadowJobWaits (SetShadowJobWait) makes the shadow job wait with delayed shadows off too, for the stalls seen
+	// in Render with them off (run 182)
+	extern bool g_bShadowJobWaits;
+	if (g_bDelayedShadows || g_bShadowJobWaits) //PE: dependencies.
 #endif
+	{
+		wiProfiler::ScopedRangeCPU rangeWait("Render Wait - Before Shadows"); // GG
 		wiJobSystem::Wait(ctx);
+	}
 	if (getShadowsEnabled())
 	{
 		cmd = device->BeginCommandList(QUEUE_GRAPHICS, "DrawShadowmaps");
 		wiJobSystem::Execute(ctx, [this, cmd](wiJobArgs args) {
+			wiProfiler::ScopedRangeCPU rangeJob("Render Job - Shadows"); // GG
 			wiRenderer::DrawShadowmaps(visibility_main, cmd);
 			});
 	}
@@ -1241,6 +1253,7 @@ void RenderPath3D::Render(int mode) const
 	// Updating textures:
 	cmd = device->BeginCommandList(QUEUE_GRAPHICS, "RefreshDecalAtlas");
 	wiJobSystem::Execute(ctx, [cmd, this](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Decal Atlas"); // GG
 		wiRenderer::BindCommonResources(cmd);
 		wiRenderer::RefreshDecalAtlas(*scene, cmd);
 		wiRenderer::RefreshLightmapAtlas(*scene, cmd);
@@ -1255,6 +1268,7 @@ void RenderPath3D::Render(int mode) const
 	{
 		cmd = device->BeginCommandList(QUEUE_GRAPHICS, "VoxelRadiance");
 		wiJobSystem::Execute(ctx, [cmd, this](wiJobArgs args) {
+			wiProfiler::ScopedRangeCPU rangeJob("Render Job - Voxel GI"); // GG
 			wiRenderer::VoxelRadiance(visibility_main, cmd);
 			});
 	}
@@ -1264,6 +1278,7 @@ void RenderPath3D::Render(int mode) const
 		// Planar reflections depth prepass:
 		cmd = device->BeginCommandList(QUEUE_GRAPHICS, "PlanarReflectionsZPrepass");
 		wiJobSystem::Execute(ctx, [cmd, this, previousCameraReflection, cloudIndex](wiJobArgs args) {
+			wiProfiler::ScopedRangeCPU rangeJob("Render Job - Reflection Prepass"); // GG
 
 			GraphicsDevice* device = wiRenderer::GetDevice();
 
@@ -1350,6 +1365,7 @@ void RenderPath3D::Render(int mode) const
 		//PE: This crash a lot try to make the mainthread run it. (Looks ok).
 		// Planar reflections opaque color pass:
 		cmd = device->BeginCommandList(QUEUE_GRAPHICS, "ComputeTiledLightCulling");
+		wiProfiler::ScopedRangeCPU rangeReflections("Render Main - Planar Reflections"); // GG: on the main thread
 		//wiJobSystem::Execute(ctx, [cmd, this, previousCameraReflection, cloudIndex](wiJobArgs args) {
 
 			GraphicsDevice* device = wiRenderer::GetDevice();
@@ -1440,6 +1456,7 @@ void RenderPath3D::Render(int mode) const
 	cmd = device->BeginCommandList(QUEUE_GRAPHICS, "PostprocessRTReflection");
 	device->WaitCommandList(cmd, cmd_maincamera_compute_effects);
 	wiJobSystem::Execute(ctx, [this, cmd, previousCamera, cloudIndex](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Opaque"); // GG
 
 		GraphicsDevice* device = wiRenderer::GetDevice();
 		device->EventBegin("Opaque Scene", cmd);
@@ -1598,6 +1615,7 @@ void RenderPath3D::Render(int mode) const
 	// Transparents, post processes, etc:
 	cmd = device->BeginCommandList(QUEUE_GRAPHICS, "RenderLightShafts");
 	wiJobSystem::Execute(ctx, [this, cmd, previousCamera, mode](wiJobArgs args) {
+		wiProfiler::ScopedRangeCPU rangeJob("Render Job - Light Shafts And Transparent"); // GG
 
 		GraphicsDevice* device = wiRenderer::GetDevice();
 
@@ -1634,11 +1652,17 @@ void RenderPath3D::Render(int mode) const
 
 	//PE: I get a crash when generating mip maps. ( ProcessDeferredMipGenRequests ).
 	//wiJobSystem::WaitSleep(ctx,1); //PE: This just make everyting slow, Added wiSpinLock to see if that solve it.
-	wiJobSystem::Wait(ctx);
+	{
+		wiProfiler::ScopedRangeCPU rangeWait("Render Wait - Jobs"); // GG
+		wiJobSystem::Wait(ctx);
+	}
 
 	RenderPath2D::Render( mode );
 
-	wiJobSystem::Wait(ctx);
+	{
+		wiProfiler::ScopedRangeCPU rangeWait("Render Wait - 2D"); // GG
+		wiJobSystem::Wait(ctx);
+	}
 }
 
 void RenderPath3D::Compose(CommandList cmd) const
