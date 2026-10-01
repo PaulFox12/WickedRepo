@@ -284,8 +284,17 @@ namespace wiProfiler
 #ifdef GGREDUCED
 		if ((!ENABLED || !initialized) && phaseThread && phaseFrameBegin > 0)
 		{
-			// GG: "CPU Frame" for GetRangeTime while profiling is off, timed as the profiler times it (BeginFrame to EndFrame)
-			phaseTimes[wiHelper::string_hash("CPU Frame")].frame += PhaseNow() - phaseFrameBegin;
+			// GG: "CPU Frame" for GetRangeTime while profiling is off, timed as the profiler times it (BeginFrame to EndFrame).
+			// Profiling turned off since BeginFrame began the "CPU Frame" range (Tab Tab closed): that range is ended here,
+			// which times it, as otherwise it stays open on the frame phase stack under every later frame
+			int depth = phaseDepth;
+			if (cpu_frame)
+			{
+				PhaseEnd(cpu_frame);
+				cpu_frame = 0;
+			}
+			if (phaseDepth == depth)
+				phaseTimes[wiHelper::string_hash("CPU Frame")].frame += PhaseNow() - phaseFrameBegin;
 		}
 #endif
 		if (!ENABLED || !initialized)
