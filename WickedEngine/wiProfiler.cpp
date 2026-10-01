@@ -20,6 +20,7 @@ using namespace wiGraphics;
 #ifdef GGREDUCED
 void (*g_pfnWickedProfilerQueries)(uint32_t queries) = nullptr;
 void (*g_pfnWickedProfilerLockWait)(double dMilliseconds) = nullptr;
+void (*g_pfnWickedProfilerLockHold)(double dMilliseconds) = nullptr;
 #endif
 
 namespace wiProfiler
@@ -42,20 +43,37 @@ namespace wiProfiler
 	bool GPU_ENABLED = true; // GG: GPU ranges and queries (SetGPUEnabled), taken up at the next BeginFrame
 	bool gpu_this_frame = true;
 
-	// GG: the ranges' lock, its wait reported for the stall probes
+	// GG: the ranges' lock, its waits and holds reported for the stall probes (the hold after the release, on the holder's
+	// thread, so a probe can take its stack)
+	std::chrono::high_resolution_clock::time_point lockHeldSince;
+	int lockDepth = 0;
 	void LockRanges()
 	{
 		if (!g_pfnWickedProfilerLockWait)
 		{
 			lock.lock();
-			return;
 		}
-		auto start = std::chrono::high_resolution_clock::now();
-		lock.lock();
-		g_pfnWickedProfilerLockWait(std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count());
+		else
+		{
+			auto start = std::chrono::high_resolution_clock::now();
+			lock.lock();
+			g_pfnWickedProfilerLockWait(std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count());
+		}
+		if (lockDepth++ == 0) lockHeldSince = std::chrono::high_resolution_clock::now();
+	}
+	void UnlockRanges()
+	{
+		double held = -1;
+		if (--lockDepth == 0 && g_pfnWickedProfilerLockHold)
+		{
+			held = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - lockHeldSince).count();
+		}
+		lock.unlock();
+		if (held >= 0) g_pfnWickedProfilerLockHold(held);
 	}
 #else
 	void LockRanges() { lock.lock(); }
+	void UnlockRanges() { lock.unlock(); }
 #endif
 	range_id cpu_frame;
 	range_id gpu_frame;
@@ -279,7 +297,7 @@ namespace wiProfiler
 
 		ranges[id].cpuBegin.record();
 
-		lock.unlock();
+		UnlockRanges();
 
 		return id;
 	}
@@ -312,7 +330,7 @@ namespace wiProfiler
 		const uint32_t query = nextQuery.fetch_add(1);
 		ranges[id].gpuBegin[heap] = query;
 
-		lock.unlock();
+		UnlockRanges();
 
 		// GG: the driver call after the lock, which every thread's ranges share: a driver call that stalled held up every
 		// range on every thread, a frame stall of seconds. The command list is this thread's own
@@ -355,7 +373,7 @@ namespace wiProfiler
 			assert(0);
 		}
 
-		lock.unlock();
+		UnlockRanges();
 
 		// GG: the driver call after the lock (BeginRangeGPU)
 		if (gpu)
@@ -403,7 +421,7 @@ namespace wiProfiler
 			time = it->second.time;
 			if (pStaleFrames) *pStaleFrames = it->second.stale;
 		}
-		lock.unlock();
+		UnlockRanges();
 		return time;
 	}
 

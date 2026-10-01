@@ -78,5 +78,6 @@ namespace wiProfiler
 // GG: when set, told each frame's GPU query count and every wait for the lock the ranges share (the game's stall probes)
 extern void (*g_pfnWickedProfilerQueries)(uint32_t queries);
 extern void (*g_pfnWickedProfilerLockWait)(double dMilliseconds);
+extern void (*g_pfnWickedProfilerLockHold)(double dMilliseconds);
 #endif
 
