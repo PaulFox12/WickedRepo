@@ -148,9 +148,25 @@ namespace wiProfiler
 	{
 		phaseThread = true;
 		double now = PhaseNow();
-		if (phaseOutsideValid && phaseDepth == 0 && g_pfnWickedFramePhase)
+		if (g_pfnWickedFramePhase && phaseFrameBegin > 0)
 		{
-			g_pfnWickedFramePhase("outside ranges", "", now - phaseFrameBegin - phaseOutermost);
+			// once a frame, which also closes the frame for the game's frame records: the time outside every range, or 0
+			// when the frame began inside ranges (a Run called from inside one, or a range never ended), named as parents
+			if (phaseOutsideValid && phaseDepth == 0)
+			{
+				g_pfnWickedFramePhase("outside ranges", "", now - phaseFrameBegin - phaseOutermost);
+			}
+			else
+			{
+				char open[200] = "";
+				for (int p = phaseDepth - 1; p >= 0 && p >= phaseDepth - 3; p--)
+				{
+					if (p < phaseDepth - 1)
+						strncat_s(open, " < ", _TRUNCATE);
+					strncat_s(open, phaseStack[p].name, _TRUNCATE);
+				}
+				g_pfnWickedFramePhase("outside ranges", open[0] ? open : "(a range begun before the last frame)", 0.0);
+			}
 		}
 		phaseFrameBegin = now;
 		phaseOutermost = 0;
