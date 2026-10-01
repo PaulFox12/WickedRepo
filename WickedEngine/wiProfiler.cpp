@@ -259,10 +259,15 @@ namespace wiProfiler
 
 		ranges[id].cmd = cmd;
 
-		ranges[id].gpuBegin[queryheap_idx] = nextQuery.fetch_add(1);
-		wiRenderer::GetDevice()->QueryEnd(&queryHeap[queryheap_idx], ranges[id].gpuBegin[queryheap_idx], cmd);
+		const int heap = queryheap_idx;
+		const uint32_t query = nextQuery.fetch_add(1);
+		ranges[id].gpuBegin[heap] = query;
 
 		lock.unlock();
+
+		// GG: the driver call after the lock, which every thread's ranges share: a driver call that stalled held up every
+		// range on every thread, a frame stall of seconds. The command list is this thread's own
+		wiRenderer::GetDevice()->QueryEnd(&queryHeap[heap], query, cmd);
 
 		return id;
 	}
@@ -273,6 +278,10 @@ namespace wiProfiler
 
 		lock.lock();
 
+		bool gpu = false;
+		int heap = queryheap_idx;
+		uint32_t query = 0;
+		CommandList cmd = COMMANDLIST_COUNT;
 		auto it = ranges.find(id);
 		if (it != ranges.end())
 		{
@@ -282,8 +291,10 @@ namespace wiProfiler
 			}
 			else
 			{
-				ranges[id].gpuEnd[queryheap_idx] = nextQuery.fetch_add(1);
-				wiRenderer::GetDevice()->QueryEnd(&queryHeap[queryheap_idx], it->second.gpuEnd[queryheap_idx], it->second.cmd);
+				query = nextQuery.fetch_add(1);
+				it->second.gpuEnd[heap] = query;
+				cmd = it->second.cmd;
+				gpu = true;
 			}
 		}
 		else
@@ -292,6 +303,12 @@ namespace wiProfiler
 		}
 
 		lock.unlock();
+
+		// GG: the driver call after the lock (BeginRangeGPU)
+		if (gpu)
+		{
+			wiRenderer::GetDevice()->QueryEnd(&queryHeap[heap], query, cmd);
+		}
 	}
 
 #ifdef GGREDUCED

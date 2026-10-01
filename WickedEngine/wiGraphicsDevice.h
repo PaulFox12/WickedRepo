@@ -4,6 +4,21 @@
 #include "wiPlatform.h"
 #include "wiEvent.h"
 
+#ifdef GGREDUCED
+// GG: a device call reported to g_pfnWickedDeviceCall (set by the game, for its stall probes): call 0 a buffer or texture
+// made, 1 a map, unmap or buffer update, 2 a present
+struct WickedDeviceCallInfo
+{
+	int call = 0;
+	const char* op = "";
+	uint64_t bytes = 0;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t format = 0;
+};
+extern void (*g_pfnWickedDeviceCall)(double dMilliseconds, const WickedDeviceCallInfo& info);
+#endif
+
 namespace wiGraphics
 {
 	typedef uint8_t CommandList;

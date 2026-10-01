@@ -32,21 +32,22 @@ extern "C" {
 using namespace Microsoft::WRL;
 
 #ifdef GGREDUCED
-// GG: when set, told how long each buffer or texture creation took, in milliseconds, on whichever thread made it (a probe
-// for frame stalls inside the driver)
-void (*g_pfnWickedResourceCreated)(double dMilliseconds) = nullptr;
-struct WickedResourceCreateTimer
+// GG: when set, told how long each buffer or texture creation, map, unmap, buffer update and present took, in milliseconds,
+// on whichever thread made it (a probe for frame stalls inside the driver)
+void (*g_pfnWickedDeviceCall)(double dMilliseconds, const WickedDeviceCallInfo& info) = nullptr;
+struct WickedDeviceCallTimer
 {
 	LARGE_INTEGER start;
-	WickedResourceCreateTimer() { QueryPerformanceCounter(&start); }
-	~WickedResourceCreateTimer()
+	WickedDeviceCallInfo info;
+	WickedDeviceCallTimer(int call, const char* op) { info.call = call; info.op = op; QueryPerformanceCounter(&start); }
+	~WickedDeviceCallTimer()
 	{
-		if (!g_pfnWickedResourceCreated) return;
+		if (!g_pfnWickedDeviceCall) return;
 		static LARGE_INTEGER freq = {};
 		if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
 		LARGE_INTEGER end;
 		QueryPerformanceCounter(&end);
-		g_pfnWickedResourceCreated((double)(end.QuadPart - start.QuadPart) * 1000.0 / (double)freq.QuadPart);
+		g_pfnWickedDeviceCall((double)(end.QuadPart - start.QuadPart) * 1000.0 / (double)freq.QuadPart, info);
 	}
 };
 #endif
@@ -1768,7 +1769,8 @@ void* GraphicsDevice_DX11::MaterialGetSRV(void* resource)
 bool GraphicsDevice_DX11::CreateBuffer(const GPUBufferDesc *pDesc, const SubresourceData* pInitialData, GPUBuffer *pBuffer) const
 {
 #ifdef GGREDUCED
-	WickedResourceCreateTimer createTimer;
+	WickedDeviceCallTimer callTimer(0, "CreateBuffer");
+	callTimer.info.bytes = pDesc->ByteWidth;
 #endif
 	auto internal_state = std::make_shared<Resource_DX11>();
 	pBuffer->internal_state = internal_state;
@@ -1810,7 +1812,10 @@ bool GraphicsDevice_DX11::CreateBuffer(const GPUBufferDesc *pDesc, const Subreso
 bool GraphicsDevice_DX11::CreateTexture(const TextureDesc* pDesc, const SubresourceData *pInitialData, Texture *pTexture) const
 {
 #ifdef GGREDUCED
-	WickedResourceCreateTimer createTimer;
+	WickedDeviceCallTimer callTimer(0, "CreateTexture");
+	callTimer.info.width = pDesc->Width;
+	callTimer.info.height = pDesc->Height;
+	callTimer.info.format = (uint32_t)pDesc->Format;
 #endif
 	auto internal_state = std::make_shared<Texture_DX11>();
 	pTexture->internal_state = internal_state;
@@ -2786,6 +2791,10 @@ int GraphicsDevice_DX11::CreateSubresource(GPUBuffer* buffer, SUBRESOURCE_TYPE t
 
 void GraphicsDevice_DX11::Map(const GPUResource* resource, Mapping* mapping) const
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(1, (mapping->_flags & Mapping::FLAG_WAIT) ? "Map (wait)" : "Map");
+	callTimer.info.bytes = mapping->size;
+#endif
 	auto internal_state = to_internal(resource);
 
 	D3D11_MAPPED_SUBRESOURCE map_result = {};
@@ -2828,6 +2837,9 @@ void GraphicsDevice_DX11::Map(const GPUResource* resource, Mapping* mapping) con
 }
 void GraphicsDevice_DX11::Unmap(const GPUResource* resource) const
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(1, "Unmap");
+#endif
 	auto internal_state = to_internal(resource);
 	immediateContext->Unmap(internal_state->resource.Get(), 0);
 }
@@ -3045,6 +3057,10 @@ void GraphicsDevice_DX11::SubmitCommandLists()
 #ifdef OPTICK_ENABLE
 			OPTICK_EVENT("Present");
 #endif
+#endif
+#ifdef GGREDUCED
+			// GG: the present timed too, for the stall probes
+			WickedDeviceCallTimer callTimer(2, "Present");
 #endif
 #ifdef GGREDUCED
 			//PE: We need to disable present when grabbing from the backbuffer.
@@ -4028,6 +4044,10 @@ void GraphicsDevice_DX11::SetSpecialGGDebugLog(char* pString, bool enablePixMark
 
 void GraphicsDevice_DX11::UpdateBuffer(const GPUBuffer* buffer, const void* data, CommandList cmd, int dataSize)
 {
+#ifdef GGREDUCED
+	WickedDeviceCallTimer callTimer(1, "UpdateBuffer");
+	callTimer.info.bytes = dataSize < 0 ? buffer->desc.ByteWidth : (uint64_t)dataSize;
+#endif
 	assert(buffer->desc.Usage != USAGE_IMMUTABLE && "Cannot update IMMUTABLE GPUBuffer!");
 	assert((int)buffer->desc.ByteWidth >= dataSize || dataSize < 0 && "Data size is too big!");
 
