@@ -13,8 +13,14 @@
 #include <mutex>
 #include <atomic>
 #include <sstream>
+#include <chrono>
 
 using namespace wiGraphics;
+
+#ifdef GGREDUCED
+void (*g_pfnWickedProfilerQueries)(uint32_t queries) = nullptr;
+void (*g_pfnWickedProfilerLockWait)(double dMilliseconds) = nullptr;
+#endif
 
 namespace wiProfiler
 {
@@ -32,6 +38,25 @@ namespace wiProfiler
 #endif
 	//std::mutex lock;
 	std::recursive_mutex lock;
+#ifdef GGREDUCED
+	bool GPU_ENABLED = true; // GG: GPU ranges and queries (SetGPUEnabled), taken up at the next BeginFrame
+	bool gpu_this_frame = true;
+
+	// GG: the ranges' lock, its wait reported for the stall probes
+	void LockRanges()
+	{
+		if (!g_pfnWickedProfilerLockWait)
+		{
+			lock.lock();
+			return;
+		}
+		auto start = std::chrono::high_resolution_clock::now();
+		lock.lock();
+		g_pfnWickedProfilerLockWait(std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count());
+	}
+#else
+	void LockRanges() { lock.lock(); }
+#endif
 	range_id cpu_frame;
 	range_id gpu_frame;
 #ifdef GGREDUCED
@@ -114,6 +139,11 @@ namespace wiProfiler
 
 		cpu_frame = BeginRangeCPU("CPU Frame");
 
+#ifdef GGREDUCED
+		gpu_this_frame = GPU_ENABLED;
+		if (!gpu_this_frame)
+			return;
+#endif
 		CommandList cmd = wiRenderer::GetDevice()->BeginCommandList();
 		gpu_frame = BeginRangeGPU("GPU Frame", cmd);
 	}
@@ -123,7 +153,18 @@ namespace wiProfiler
 			return;
 
 		GraphicsDevice* device = wiRenderer::GetDevice();
+		double gpu_frequency = (double)device->GetTimestampFrequency() / 1000.0;
 
+#ifdef GGREDUCED
+		if (!gpu_this_frame)
+		{
+			// GG: CPU ranges only, no GPU Frame query, resolve or read back
+			EndRange(cpu_frame);
+			if (g_pfnWickedProfilerQueries) g_pfnWickedProfilerQueries(0);
+		}
+		else
+		{
+#endif
 		// note: read the GPU Frame end range manually because it will be on a separate command list than start point: 
 		auto& gpu_range = ranges[gpu_frame];
 		gpu_range.gpuEnd[queryheap_idx] = nextQuery.fetch_add(1);
@@ -131,11 +172,12 @@ namespace wiProfiler
 
 		EndRange(cpu_frame);
 
-		double gpu_frequency = (double)device->GetTimestampFrequency() / 1000.0;
-
 		device->QueryResolve(&queryHeap[queryheap_idx], 0, nextQuery.load(), cmd);
 
 		writtenQueries[queryheap_idx] = nextQuery.load();
+#ifdef GGREDUCED
+		if (g_pfnWickedProfilerQueries) g_pfnWickedProfilerQueries(writtenQueries[queryheap_idx]);
+#endif
 		nextQuery.store(0);
 		queryheap_idx = (queryheap_idx + 1) % arraysize(queryHeap);
 		if (writtenQueries[queryheap_idx] > 0)
@@ -147,6 +189,9 @@ namespace wiProfiler
 #endif
 			wiRenderer::GetDevice()->QueryRead(&queryHeap[queryheap_idx], 0, writtenQueries[queryheap_idx], queryResults.data());
 		}
+#ifdef GGREDUCED
+		}
+#endif
 
 		for (auto& x : ranges)
 		{
@@ -220,7 +265,7 @@ namespace wiProfiler
 
 		range_id id = wiHelper::string_hash(name);
 
-		lock.lock();
+		LockRanges();
 
 		// If one range name is hit multiple times, differentiate between them!
 		size_t differentiator = 0;
@@ -242,10 +287,14 @@ namespace wiProfiler
 	{
 		if (!ENABLED || !initialized)
 			return 0;
+#ifdef GGREDUCED
+		if (!gpu_this_frame)
+			return 0;
+#endif
 
 		range_id id = wiHelper::string_hash(name);
 
-		lock.lock();
+		LockRanges();
 
 		// If one range name is hit multiple times, differentiate between them!
 		size_t differentiator = 0;
@@ -275,8 +324,12 @@ namespace wiProfiler
 	{
 		if (!ENABLED || !initialized)
 			return;
+#ifdef GGREDUCED
+		if (id == 0)
+			return; // a GPU range skipped while GPU timing is off
+#endif
 
-		lock.lock();
+		LockRanges();
 
 		bool gpu = false;
 		int heap = queryheap_idx;
@@ -343,7 +396,7 @@ namespace wiProfiler
 			return -1;
 
 		float time = -1;
-		lock.lock();
+		LockRanges();
 		auto it = ranges.find(wiHelper::string_hash(name));
 		if (it != ranges.end() && it->second.avg_counter > arraysize(it->second.times))
 		{
@@ -541,6 +594,13 @@ namespace wiProfiler
 		for (auto& x : ranges) x.second.peek = 0;
 		for (int i = 0; i < COMMANDLIST_COUNT + 1; i++) for (auto& x : ranges) x.second.peek = 0;
 	}
+
+#ifdef GGREDUCED
+	void SetGPUEnabled(bool value)
+	{
+		GPU_ENABLED = value;
+	}
+#endif
 
 	void SetEnabled(bool value)
 	{

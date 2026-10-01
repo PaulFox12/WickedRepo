@@ -67,5 +67,16 @@ namespace wiProfiler
 	void SetEnabled(bool value);
 
 	bool IsEnabled();
+
+#ifdef GGREDUCED
+	// GG: false times CPU ranges only: no GPU range, query, resolve or read back, from the next BeginFrame (true by default)
+	void SetGPUEnabled(bool value);
+#endif
 };
+
+#ifdef GGREDUCED
+// GG: when set, told each frame's GPU query count and every wait for the lock the ranges share (the game's stall probes)
+extern void (*g_pfnWickedProfilerQueries)(uint32_t queries);
+extern void (*g_pfnWickedProfilerLockWait)(double dMilliseconds);
+#endif
 
