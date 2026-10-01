@@ -59,7 +59,7 @@ namespace wiJobSystem
 	}
 
 #ifdef GGREDUCED
-	static int affinityMode = 0;
+	static int affinityMode = 1;
 	void SetAffinityMode(int mode)
 	{
 		affinityMode = mode;

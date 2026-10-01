@@ -18,9 +18,9 @@ namespace wiJobSystem
 	void Initialize();
 
 #ifdef GGREDUCED
-	// GG: how the workers are tied to cores, set before Initialize: 0 each pinned to its own core (the default), 1 that core
-	// as a preference only (SetThreadIdealProcessor), 2 not tied. A pinned worker cannot move when its core is slow to run
-	// it (an efficiency or low power core on a hybrid CPU), and a job it holds waits with it
+	// GG: how the workers are tied to cores, set before Initialize: 0 each pinned to its own core (as stock Wicked), 1 that
+	// core as a preference only (SetThreadIdealProcessor, the default), 2 not tied. A pinned worker cannot move when its core
+	// is slow to run it (an efficiency or low power core on a hybrid CPU), and a job it holds waits with it, for seconds
 	void SetAffinityMode(int mode);
 #endif
 
