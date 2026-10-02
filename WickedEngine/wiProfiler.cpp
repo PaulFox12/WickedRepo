@@ -190,6 +190,20 @@ namespace wiProfiler
 	range_id cpu_frame;
 	range_id gpu_frame;
 #ifdef GGREDUCED
+	// GG: a frame run from inside another (StartForceRender: a video played from Lua, the title and loading screens) begins
+	// its own "CPU Frame" and "GPU Frame"; the outer frame's are kept here meanwhile and given back when the inner one ends,
+	// so each EndFrame ends its own frame's ranges (before, the outer EndFrame ended the inner ones a second time, and its
+	// own "CPU Frame" stayed on the frame phase stack, one more for every inner frame)
+	struct OuterFrame
+	{
+		range_id cpu = 0;
+		range_id gpu = 0;
+		bool gpu_this_frame = false;
+	};
+	OuterFrame outerFrames[4];
+	int frameDepth = 0; // the frames begun and not yet ended
+#endif
+#ifdef GGREDUCED
 	// GG: read back eight frames late rather than two, past the frames the GPU may still be working on (four was not enough
 	// when the GPU is the bottleneck)
 	GPUQueryHeap queryHeap[wiGraphics::GraphicsDevice::GetBufferCount() + 7];
@@ -227,6 +241,17 @@ namespace wiProfiler
 	void BeginFrame()
 	{
 #ifdef GGREDUCED
+		if (frameDepth > 0 && frameDepth <= (int)arraysize(outerFrames))
+		{
+			OuterFrame& outer = outerFrames[frameDepth - 1];
+			outer.cpu = cpu_frame;
+			outer.gpu = gpu_frame;
+			outer.gpu_this_frame = gpu_this_frame;
+			cpu_frame = 0;
+			gpu_frame = 0;
+		}
+		frameDepth++;
+
 		PhaseFrame();
 
 		// the draw call and polygon counts are taken every frame, as the renderer counts whether or not profiling is on
@@ -279,7 +304,11 @@ namespace wiProfiler
 		CommandList cmd = wiRenderer::GetDevice()->BeginCommandList();
 		gpu_frame = BeginRangeGPU("GPU Frame", cmd);
 	}
+#ifdef GGREDUCED
+	void EndFrameRanges(CommandList cmd)
+#else
 	void EndFrame(CommandList cmd)
+#endif
 	{
 #ifdef GGREDUCED
 		if ((!ENABLED || !initialized) && phaseThread && phaseFrameBegin > 0)
@@ -405,6 +434,24 @@ namespace wiProfiler
 			range.in_use = false;
 		}
 	}
+#ifdef GGREDUCED
+	void EndFrame(CommandList cmd)
+	{
+		EndFrameRanges(cmd);
+
+		// an inner frame ended: the outer frame's ranges back (BeginFrame). ForceRender's EndFrame, which has no BeginFrame
+		// of its own, ends the frame it is called in, as before, and that frame's own EndFrame then finds none open
+		if (frameDepth > 1 && frameDepth - 1 <= (int)arraysize(outerFrames))
+		{
+			const OuterFrame& outer = outerFrames[frameDepth - 2];
+			cpu_frame = outer.cpu;
+			gpu_frame = outer.gpu;
+			gpu_this_frame = outer.gpu_this_frame;
+		}
+		if (frameDepth > 0)
+			frameDepth--;
+	}
+#endif
 
 	range_id BeginRangeCPU(const char* name)
 	{
