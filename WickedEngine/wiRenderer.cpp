@@ -9039,6 +9039,9 @@ void RefreshEnvProbes(const Visibility& vis, CommandList cmd)
 
 #ifdef GGREDUCED
 	if (zNearP <= 0 || zFarP <= 0) return;
+
+	// GG: what probe captures cost, for the profiler (and Lua's GetRenderTime)
+	auto range = wiProfiler::BeginRangeGPU("Environment Probe Refresh", cmd);
 #endif
 
 	auto render_probe = [&](const EnvironmentProbeComponent& probe, const AABB& probe_aabb) {
@@ -9259,7 +9262,11 @@ void RefreshEnvProbes(const Visibility& vis, CommandList cmd)
 	}
 	}
 
+#ifdef GGREDUCED
+	wiProfiler::EndRange(range);
+#else
 	//wiProfiler::EndRange(range);
+#endif
 	device->EventEnd(cmd); // EnvironmentProbe Refresh
 }
 #ifndef GGREDUCED
