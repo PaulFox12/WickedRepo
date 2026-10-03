@@ -1854,7 +1854,11 @@ namespace wiScene
 				wiBackLog::post("Global Lightmap atlas packing failed!");
 			}
 		}
+#ifdef GGREDUCED
+		if (!lightmap.IsValid() && bDrawnScene) // GG: not for a scene loaded only to be merged, which is never drawn
+#else
 		if (!lightmap.IsValid())
+#endif
 		{
 			// In case no lightmaps, still create a dummy texture
 			TextureDesc desc;
