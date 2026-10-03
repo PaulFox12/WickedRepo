@@ -10,6 +10,9 @@
 #include "wiHelper.h"
 #include "wiRenderer.h"
 #include "wiBackLog.h"
+#ifdef GGREDUCED
+#include "wiProfiler.h"
+#endif
 
 #include <functional>
 #include <unordered_map>
@@ -1618,6 +1621,9 @@ namespace wiScene
 		// (WickedCall_LoadWiScene, LoadModel) is updated once, and made its three heaps of 5120 D3D11 queries on every
 		// load, released with it (a particle effect load each time)
 		const bool bDrawnScene = this == &GetScene();
+		// GG: each stage of the update in its own range (#197), so a slow "Update - Wicked" frame names the stage; a stage
+		// that dispatches jobs runs to the wait that ends it
+		auto rangeOcclusion = wiProfiler::BeginRangeCPU("Scene - Occlusion Read");
 		if(!wiRenderer::GetFreezeCullingCameraEnabled() && bDrawnScene)
 #else
 		if(!wiRenderer::GetFreezeCullingCameraEnabled())
@@ -1726,6 +1732,10 @@ namespace wiScene
 #endif
 		}
 
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeOcclusion);
+		auto rangeTransforms = wiProfiler::BeginRangeCPU("Scene - Transforms, Animations");
+#endif
 		wiJobSystem::context ctx;
 
 		RunPreviousFrameTransformUpdateSystem(ctx);
@@ -1736,6 +1746,10 @@ namespace wiScene
 
 		wiJobSystem::Wait(ctx); // dependencies
 
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeTransforms);
+		auto rangeHierarchy = wiProfiler::BeginRangeCPU("Scene - Hierarchy, Meshes, Materials");
+#endif
 #ifdef MTHREAD_HIERARCHY
 		RunHierarchyUpdateSystem(ctx);
 		RunMeshUpdateSystem(ctx);
@@ -1743,6 +1757,10 @@ namespace wiScene
 		wiJobSystem::Wait(ctx); // dependencies
 #else
 		RunHierarchyUpdateSystem(ctx);
+#endif
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeHierarchy);
+		auto rangeArmatures = wiProfiler::BeginRangeCPU("Scene - Armatures, Weather");
 #endif
 #ifndef GGREDUCED
 		RunSpringUpdateSystem(ctx);
@@ -1767,6 +1785,10 @@ namespace wiScene
 
 		wiJobSystem::Wait(ctx); // dependencies
 
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeArmatures);
+		auto rangeObjects = wiProfiler::BeginRangeCPU("Scene - Objects, Lights");
+#endif
 		RunObjectUpdateSystem(ctx);
 		RunCameraUpdateSystem(ctx);
 		RunDecalUpdateSystem(ctx);
@@ -1788,12 +1810,20 @@ namespace wiScene
 #ifdef GGREDUCED
 		// GG: a scene loaded only to be merged leaves its emitters' buffers to be made once they are in the drawn scene
 		if (bDrawnScene)
+		{
+			auto rangeParticles = wiProfiler::BeginRangeCPU("Scene - Particles");
 			RunParticleUpdateSystem(ctx);
+			wiProfiler::EndRange(rangeParticles);
+		}
 #else
 		RunParticleUpdateSystem(ctx); // GGREDUCED
 #endif
 
 		wiJobSystem::Wait(ctx); // dependencies
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeObjects);
+		auto rangeAfter = wiProfiler::BeginRangeCPU("Scene - Bounds, Lightmaps, Decal Atlas");
+#endif
 
 		// Merge parallel bounds computation (depends on object update system):
 		bounds = AABB();
@@ -1928,6 +1958,9 @@ namespace wiScene
 			}
 		}
 
+#ifdef GGREDUCED
+		wiProfiler::EndRange(rangeAfter);
+#endif
 	}
 	void Scene::Clear()
 	{

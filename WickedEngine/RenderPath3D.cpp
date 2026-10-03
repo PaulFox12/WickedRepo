@@ -858,14 +858,31 @@ void RenderPath3D::Update(float dt)
 		ResizeBuffers();
 	}
 
+#ifdef GGREDUCED
+	// GG: each part of the update in its own range (#197), so a slow "Update - Wicked" frame names it
+	auto rangeTextures = wiProfiler::BeginRangeCPU("Wicked - Texture Use");
+#endif
 	//PE: Only update textures depending of usage. to save VRAM.
 	CheckUsedTextures(false);
+#ifdef GGREDUCED
+	wiProfiler::EndRange(rangeTextures);
+	auto range2D = wiProfiler::BeginRangeCPU("Wicked - 2D Update");
+#endif
 
 	RenderPath2D::Update(dt);
+#ifdef GGREDUCED
+	wiProfiler::EndRange(range2D);
+#endif
 
 	if (getSceneUpdateEnabled())
 	{
+#ifdef GGREDUCED
+		auto rangeScene = wiProfiler::BeginRangeCPU("Wicked - Scene Update");
 		scene->Update(dt * wiRenderer::GetGameSpeed());
+		wiProfiler::EndRange(rangeScene);
+#else
+		scene->Update(dt * wiRenderer::GetGameSpeed());
+#endif
 		if (wiRenderer::GetRaytracedShadowsEnabled() ||
 			getAO() == AO_RTAO ||
 			getRaytracedReflectionEnabled())
@@ -901,7 +918,13 @@ void RenderPath3D::Update(float dt)
 		OPTICK_EVENT("wiRenderer::UpdateVisibility getReflectionsEnabled");
 #endif
 #endif
+#ifdef GGREDUCED
+		auto rangeReflection = wiProfiler::BeginRangeCPU("Wicked - Reflection Culling");
 		wiRenderer::UpdateVisibility( visibility_reflection, std::max(maxApparentSize, 0.002f) ); // reflections cull more agressively by default
+		wiProfiler::EndRange(rangeReflection);
+#else
+		wiRenderer::UpdateVisibility( visibility_reflection, std::max(maxApparentSize, 0.002f) ); // reflections cull more agressively by default
+#endif
 	}
 
 	XMUINT2 internalResolution;
@@ -913,6 +936,9 @@ void RenderPath3D::Update(float dt)
 	OPTICK_EVENT("wiRenderer::UpdatePerFrameData");
 #endif
 #endif
+#ifdef GGREDUCED
+	auto rangePerFrame = wiProfiler::BeginRangeCPU("Wicked - Per Frame Data");
+#endif
 	wiRenderer::UpdatePerFrameData(
 		*scene,
 		visibility_main,
@@ -921,6 +947,9 @@ void RenderPath3D::Update(float dt)
 		*this,
 		dt
 	);
+#ifdef GGREDUCED
+	wiProfiler::EndRange(rangePerFrame);
+#endif
 
 	if (wiRenderer::GetTemporalAAEnabled())
 	{
