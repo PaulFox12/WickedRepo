@@ -188,10 +188,13 @@ namespace wiJobSystem
 		job.sharedmemory_size = 0;
 #ifdef GGREDUCED
 		job.queued = g_pfnWickedJobStall ? JobNow() : 0;
-#endif
 
+		// Try to push a new job until it is pushed successfully (GG: moved in, the queue keeps it as it is until then):
+		while (!jobQueue.push_back(std::move(job))) { wakeCondition.notify_all(); work(); }
+#else
 		// Try to push a new job until it is pushed successfully:
 		while (!jobQueue.push_back(job)) { wakeCondition.notify_all(); work(); }
+#endif
 
 		// Wake any one thread that might be sleeping:
 		wakeCondition.notify_one();
@@ -224,12 +227,35 @@ namespace wiJobSystem
 			job.groupJobOffset = groupID * groupSize;
 			job.groupJobEnd = std::min(job.groupJobOffset + groupSize, jobCount);
 
+#ifdef GGREDUCED
+			// GG: each group's copy made here, before the queue's lock, and moved in
+			Job groupJob = job;
+			while (!jobQueue.push_back(std::move(groupJob))) { wakeCondition.notify_all(); work(); }
+#else
 			// Try to push a new job until it is pushed successfully:
 			while (!jobQueue.push_back(job)) { wakeCondition.notify_all(); work(); }
+#endif
 		}
 
+#ifdef GGREDUCED
+		// GG: wake as many sleeping workers as there are groups, not all of them for one group (each woken worker that finds
+		// nothing goes back to sleep, after taking the queue's lock)
+		const uint32_t wake = std::min(groupCount, numThreads);
+		if (wake >= numThreads)
+		{
+			wakeCondition.notify_all();
+		}
+		else
+		{
+			for (uint32_t i = 0; i < wake; ++i)
+			{
+				wakeCondition.notify_one();
+			}
+		}
+#else
 		// Wake any threads that might be sleeping:
 		wakeCondition.notify_all();
+#endif
 	}
 
 	uint32_t DispatchGroupCount(uint32_t jobCount, uint32_t groupSize)
