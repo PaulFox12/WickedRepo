@@ -4128,7 +4128,9 @@ OPTICK_EVENT();
 		assert(probes.GetCount() == aabb_probes.GetCount());
 
 #ifdef GGREDUCED
-		if (!envmapArray.IsValid() || envmapNewRes != envmapRes) // even when zero probes, this will be created, since sometimes only the sky will be rendered into it
+		// GG: not for a scene loaded only to be merged into the drawn one, which never renders probes: each made a 16-probe
+		// cube map array and its depth buffer on every load and released them with it
+		if (this == &GetScene() && (!envmapArray.IsValid() || envmapNewRes != envmapRes)) // even when zero probes, this will be created, since sometimes only the sky will be rendered into it
 		{
 			envmapRes = envmapNewRes;
 #else
