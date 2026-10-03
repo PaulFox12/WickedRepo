@@ -1613,7 +1613,15 @@ namespace wiScene
 		}
 
 		// Occlusion culling read:
+#ifdef GGREDUCED
+		// GG: only the scene that is drawn makes and reads occlusion queries. A scene loaded only to be merged into it
+		// (WickedCall_LoadWiScene, LoadModel) is updated once, and made its three heaps of 5120 D3D11 queries on every
+		// load, released with it (a particle effect load each time)
+		const bool bDrawnScene = this == &GetScene();
+		if(!wiRenderer::GetFreezeCullingCameraEnabled() && bDrawnScene)
+#else
 		if(!wiRenderer::GetFreezeCullingCameraEnabled())
+#endif
 		{
 			if (!queryHeap[0].IsValid())
 			{
@@ -1777,7 +1785,13 @@ namespace wiScene
 		//	23540 and 920 are the implicated thread ids.[MISCELLANEOUS CORRUPTION #28: CORRUPTED_MULTITHREADING]
 
 		//PE: Moved to mainthread only.
+#ifdef GGREDUCED
+		// GG: a scene loaded only to be merged leaves its emitters' buffers to be made once they are in the drawn scene
+		if (bDrawnScene)
+			RunParticleUpdateSystem(ctx);
+#else
 		RunParticleUpdateSystem(ctx); // GGREDUCED
+#endif
 
 		wiJobSystem::Wait(ctx); // dependencies
 
