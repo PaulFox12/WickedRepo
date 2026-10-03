@@ -227,10 +227,19 @@ DWORD64 GetElapsedMilliseconds() {
 
 void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 {
+#ifdef GGREDUCED
+	// GG: a paused emitter makes its buffers when it is first resumed. A pooled effect is loaded and parked paused, and
+	// every one made its buffers in the frame after the loads
+	if (IsPaused())
+		return;
+
+	CreateSelfBuffers();
+#else
 	CreateSelfBuffers();
 
 	if (IsPaused())
 		return;
+#endif
 
 	emit = std::max(0.0f, emit - floorf(emit));
 
@@ -754,6 +763,12 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 
 void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialComponent& material, CommandList cmd) const
 {
+#ifdef GGREDUCED
+	if (!particleBuffer.IsValid())
+	{
+		return; // GG: paused since it was loaded, so no buffers yet (UpdateCPU) and nothing to draw
+	}
+#endif
 	GraphicsDevice* device = wiRenderer::GetDevice();
 	device->EventBegin("EmittedParticle", cmd);
 
