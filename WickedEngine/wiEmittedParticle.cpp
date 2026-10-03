@@ -69,6 +69,9 @@ void wiEmittedParticle::CreateSelfBuffers()
 		return;
 	}
 	buffersUpToDate = true;
+#ifdef GGREDUCED
+	restartPending = false; // new buffers hold no particles
+#endif
 
 
 	// GPU-local buffer descriptors:
@@ -341,7 +344,16 @@ void wiEmittedParticle::Burst(int num)
 }
 void wiEmittedParticle::Restart()
 {
+#ifdef GGREDUCED
+	// GG: the particles are cleared in the next UpdateGPU and the buffers kept. Making every buffer again cost each reuse
+	// of a pooled effect (Lua's WParticleEffectAction 4) its buffers
+	if (buffersUpToDate)
+	{
+		restartPending = true;
+	}
+#else
 	buffersUpToDate = false;
+#endif
 	SetPaused(false);
 }
 
@@ -353,6 +365,27 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 	}
 
 	GraphicsDevice* device = wiRenderer::GetDevice();
+
+#ifdef GGREDUCED
+	if (restartPending)
+	{
+		// every particle dead, as in new buffers: the counters, and every index on the dead list again (before this
+		// frame's emit)
+		restartPending = false;
+		ParticleCounters counters;
+		counters.aliveCount = 0;
+		counters.deadCount = MAX_PARTICLES;
+		counters.realEmitCount = 0;
+		counters.aliveCount_afterSimulation = 0;
+		device->UpdateBuffer(&counterBuffer, &counters, cmd);
+		std::vector<uint32_t> indices(MAX_PARTICLES);
+		for (uint32_t i = 0; i < MAX_PARTICLES; ++i)
+		{
+			indices[i] = i;
+		}
+		device->UpdateBuffer(&deadList, indices.data(), cmd);
+	}
+#endif
 
 	if (!IsPaused())
 	{

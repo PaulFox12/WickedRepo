@@ -48,6 +48,9 @@ private:
 	float emit = 0.0f;
 	int burst = 0;
 	bool buffersUpToDate = false;
+#ifdef GGREDUCED
+	mutable bool restartPending = false; // GG: Restart clears the particles in the next UpdateGPU, keeping the buffers
+#endif
 	uint32_t MAX_PARTICLES = 1000;
 
 public:
