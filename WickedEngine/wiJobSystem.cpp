@@ -8,6 +8,12 @@
 #include <condition_variable>
 #include <string>
 #include <algorithm>
+#ifdef GGREDUCED
+#include <chrono>
+
+void (*g_pfnWickedJobStall)(const WickedJobStallInfo& info) = nullptr;
+double g_dWickedJobStallMilliseconds = 20.0;
+#endif
 
 namespace wiJobSystem
 {
@@ -19,6 +25,9 @@ namespace wiJobSystem
 		uint32_t groupJobOffset;
 		uint32_t groupJobEnd;
 		uint32_t sharedmemory_size;
+#ifdef GGREDUCED
+		double queued = 0; // GG: when it was queued (JobNow), for the job stall report
+#endif
 	};
 
 	uint32_t numThreads = 0;
@@ -26,12 +35,24 @@ namespace wiJobSystem
 	std::condition_variable wakeCondition;
 	std::mutex wakeMutex;
 
+#ifdef GGREDUCED
+	static inline double JobNow()
+	{
+		return std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+	}
+	thread_local const context* waitingFor = nullptr; // GG: the context this thread is in Wait for, if any
+#endif
+
 	// This function executes the next item from the job queue. Returns true if successful, false if there was no job available
 	inline bool work()
 	{
 		Job job;
 		if (jobQueue.pop_front(job))
 		{
+#ifdef GGREDUCED
+			const double start = g_pfnWickedJobStall ? JobNow() : 0;
+			const uint32_t coreStart = g_pfnWickedJobStall ? GetCurrentProcessorNumber() : 0;
+#endif
 			wiJobArgs args;
 			args.groupID = job.groupID;
 			if (job.sharedmemory_size > 0)
@@ -52,6 +73,25 @@ namespace wiJobSystem
 				job.task(args);
 			}
 
+#ifdef GGREDUCED
+			if (g_pfnWickedJobStall)
+			{
+				const double end = JobNow();
+				if (end - start >= g_dWickedJobStallMilliseconds || start - job.queued >= g_dWickedJobStallMilliseconds)
+				{
+					WickedJobStallInfo info;
+					info.name = job.task.target_type().name();
+					info.context = job.ctx;
+					info.waitingFor = waitingFor;
+					info.queuedMilliseconds = start - job.queued;
+					info.runMilliseconds = end - start;
+					info.jobs = job.groupJobEnd - job.groupJobOffset;
+					info.coreStart = coreStart;
+					info.coreEnd = GetCurrentProcessorNumber();
+					g_pfnWickedJobStall(info);
+				}
+			}
+#endif
 			job.ctx->counter.fetch_sub(1);
 			return true;
 		}
@@ -146,6 +186,9 @@ namespace wiJobSystem
 		job.groupJobOffset = 0;
 		job.groupJobEnd = 1;
 		job.sharedmemory_size = 0;
+#ifdef GGREDUCED
+		job.queued = g_pfnWickedJobStall ? JobNow() : 0;
+#endif
 
 		// Try to push a new job until it is pushed successfully:
 		while (!jobQueue.push_back(job)) { wakeCondition.notify_all(); work(); }
@@ -170,6 +213,9 @@ namespace wiJobSystem
 		job.ctx = &ctx;
 		job.task = task;
 		job.sharedmemory_size = (uint32_t)sharedmemory_size;
+#ifdef GGREDUCED
+		job.queued = g_pfnWickedJobStall ? JobNow() : 0;
+#endif
 
 		for (uint32_t groupID = 0; groupID < groupCount; ++groupID)
 		{
@@ -204,7 +250,14 @@ namespace wiJobSystem
 		wakeCondition.notify_all();
 
 		// Waiting will also put the current thread to good use by working on an other job if it can:
+#ifdef GGREDUCED
+		const context* outer = waitingFor;
+		waitingFor = &ctx;
 		while (IsBusy(ctx)) { work(); }
+		waitingFor = outer;
+#else
+		while (IsBusy(ctx)) { work(); }
+#endif
 	}
 
 	void WaitSleep(const context& ctx, uint32_t time)
@@ -216,7 +269,10 @@ namespace wiJobSystem
 		Sleep(time);
 
 		// Waiting will also put the current thread to good use by working on an other job if it can:
+		const context* outer = waitingFor;
+		waitingFor = &ctx;
 		while (IsBusy(ctx)) { work(); }
+		waitingFor = outer;
 	}
 
 }

@@ -53,3 +53,21 @@ namespace wiJobSystem
 	void WaitSleep(const context& ctx,uint32_t time);
 #endif
 }
+
+#ifdef GGREDUCED
+// GG: a job that waited in the queue or ran for stallMilliseconds or more, told to g_pfnWickedJobStall by the thread that
+// ran it: what queued it (the job's function, for a lambda its type name, which names the function it was written in),
+// how long it queued and ran, and whether that thread was waiting on a context (Wait runs any queued job, of any context)
+struct WickedJobStallInfo
+{
+	const char* name;
+	const void* context;			// the job's own
+	const void* waitingFor;			// the context the running thread was waiting on, or null for a worker's own loop
+	double queuedMilliseconds;
+	double runMilliseconds;
+	uint32_t jobs;					// jobs in its group, run one after the other
+	uint32_t coreStart, coreEnd;	// GetCurrentProcessorNumber when it started and ended
+};
+extern void (*g_pfnWickedJobStall)(const WickedJobStallInfo& info);
+extern double g_dWickedJobStallMilliseconds; // 20 by default
+#endif
