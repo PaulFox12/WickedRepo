@@ -49,6 +49,22 @@ namespace wiResourceManager
 	int g_iErrorCode = 0;
 	void SetErrorCode(int iCode) { g_iErrorCode = iCode; }
 	int GetErrorCode(void) { return g_iErrorCode; }
+
+	// GG: a file's embedded resources, kept by name until something loads that name (Serialize) and dropped with the
+	// ResourceSerializer if nothing does. Before, each was decoded and created as it was read, and one no component of the
+	// file named was released again at the end of the load: a particle effect saved with a stale 5.8 MB picture decoded
+	// it on every load
+	std::unordered_map<std::string, std::vector<uint8_t>> pending;
+
+	ResourceSerializer::~ResourceSerializer()
+	{
+		locker.lock();
+		for (const std::string& name : pending_names)
+		{
+			pending.erase(name);
+		}
+		locker.unlock();
+	}
 #endif
 
 	std::shared_ptr<wiResource> Load(const std::string& name, uint32_t flags, const uint8_t* filedata, size_t filesize)
@@ -76,7 +92,20 @@ namespace wiResourceManager
 
 		if (filedata == nullptr || filesize == 0)
 		{
+#ifdef GGREDUCED
+			// GG: the embedded copy of the file being loaded, if it has one, before the disk (as when it was decoded first)
+			locker.lock();
+			auto it = pending.find(name);
+			if (it != pending.end())
+			{
+				resource->filedata = std::move(it->second);
+				pending.erase(it);
+			}
+			locker.unlock();
+			if (resource->filedata.empty() && !wiHelper::FileRead(name, resource->filedata))
+#else
 			if (!wiHelper::FileRead(name, resource->filedata))
+#endif
 			{
 				resource.reset();
 				return nullptr;
@@ -498,6 +527,26 @@ namespace wiResourceManager
 			size_t serializable_count = 0;
 			archive >> serializable_count;
 
+#ifdef GGREDUCED
+			// GG: each is kept by name for Load to find when something of the file loads that name, not decoded here
+			for (size_t i = 0; i < serializable_count; ++i)
+			{
+				std::string name;
+				uint32_t flags = 0;
+				std::vector<uint8_t> filedata;
+				archive >> name;
+				archive >> flags;
+				archive >> filedata;
+				name = archive.GetSourceDirectory() + name;
+
+				locker.lock();
+				if (pending.emplace(name, std::move(filedata)).second)
+				{
+					seri.pending_names.push_back(name);
+				}
+				locker.unlock();
+			}
+#else
 			struct TempResource
 			{
 				std::string name;
@@ -531,6 +580,7 @@ namespace wiResourceManager
 			}
 
 			wiJobSystem::Wait(ctx);
+#endif
 		}
 		else
 		{

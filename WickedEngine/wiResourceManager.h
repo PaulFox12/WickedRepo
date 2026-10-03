@@ -75,6 +75,10 @@ namespace wiResourceManager
 	struct ResourceSerializer
 	{
 		std::vector<std::shared_ptr<wiResource>> resources;
+#ifdef GGREDUCED
+		std::vector<std::string> pending_names; // GG: the embedded resources Serialize kept, dropped with this if not loaded
+		~ResourceSerializer();
+#endif
 	};
 	// Serializes all resources that are compatible
 	//	Compatible resources are those whose file data is kept around using the IMPORT_RETAIN_FILEDATA flag when loading.
