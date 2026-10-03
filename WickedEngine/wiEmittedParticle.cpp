@@ -57,6 +57,13 @@ void wiEmittedParticle::SetMaxParticleCount(uint32_t value)
 
 void wiEmittedParticle::CreateSelfBuffers()
 {
+#ifdef GGREDUCED
+	// GG: an emitter switched to SPH after its buffers were made needs the SPH buffers too
+	if (buffersUpToDate && IsSPHEnabled() && !sphPartitionCellOffsets.IsValid())
+	{
+		buffersUpToDate = false;
+	}
+#endif
 	if (buffersUpToDate)
 	{
 		return;
@@ -102,6 +109,30 @@ void wiEmittedParticle::CreateSelfBuffers()
 	wiRenderer::GetDevice()->CreateBuffer(&bd, &data, &distanceBuffer);
 	data.pSysMem = nullptr;
 
+#ifdef GGREDUCED
+	// GG: the SPH buffers only for an emitter that simulates SPH, the only one UpdateGPU binds them for: the cell offsets
+	// alone are 4 MB (SPH_PARTITION_BUCKET_COUNT), and every emitter made them
+	if (IsSPHEnabled())
+	{
+		bd.StructureByteStride = sizeof(float); // really, it is uint, but sorting is performing comparisons on floats, so whateva
+		bd.ByteWidth = bd.StructureByteStride * MAX_PARTICLES;
+		wiRenderer::GetDevice()->CreateBuffer(&bd, nullptr, &sphPartitionCellIndices);
+
+		bd.StructureByteStride = sizeof(uint32_t);
+		bd.ByteWidth = bd.StructureByteStride * SPH_PARTITION_BUCKET_COUNT;
+		wiRenderer::GetDevice()->CreateBuffer(&bd, nullptr, &sphPartitionCellOffsets);
+
+		bd.StructureByteStride = sizeof(float);
+		bd.ByteWidth = bd.StructureByteStride * MAX_PARTICLES;
+		wiRenderer::GetDevice()->CreateBuffer(&bd, nullptr, &densityBuffer);
+	}
+	else
+	{
+		sphPartitionCellIndices = GPUBuffer();
+		sphPartitionCellOffsets = GPUBuffer();
+		densityBuffer = GPUBuffer();
+	}
+#else
 	// SPH Partitioning grid indices per particle:
 	bd.StructureByteStride = sizeof(float); // really, it is uint, but sorting is performing comparisons on floats, so whateva
 	bd.ByteWidth = bd.StructureByteStride * MAX_PARTICLES;
@@ -116,6 +147,7 @@ void wiEmittedParticle::CreateSelfBuffers()
 	bd.StructureByteStride = sizeof(float);
 	bd.ByteWidth = bd.StructureByteStride * MAX_PARTICLES;
 	wiRenderer::GetDevice()->CreateBuffer(&bd, nullptr, &densityBuffer);
+#endif
 
 	// Particle System statistics:
 	ParticleCounters counters;
