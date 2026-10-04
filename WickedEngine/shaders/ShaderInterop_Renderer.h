@@ -272,7 +272,9 @@ static const uint ENTITY_FLAG_DECAL_FACING = 1 << 1;
 // a blast round the decal's centre: triplanar, over the sphere inside its box, on surfaces facing the centre
 static const uint ENTITY_FLAG_DECAL_BLAST = 1 << 2;
 
-static const uint SHADER_ENTITY_COUNT = 256;
+// GG: 1024 lights, decals, probes and force fields in the frame's entity array (256 before); the same in all three copies
+// of this header (WickedEngine\shaders, GGTerrain\CustomShaders, GGTerrain\Shaders\PBR), which the fork check holds
+static const uint SHADER_ENTITY_COUNT = 1024;
 static const uint SHADER_ENTITY_TILE_BUCKET_COUNT = SHADER_ENTITY_COUNT / 32;
 
 static const uint MATRIXARRAY_COUNT = 128;
