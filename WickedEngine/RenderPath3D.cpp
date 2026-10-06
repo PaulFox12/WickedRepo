@@ -589,7 +589,9 @@ void RenderPath3D::ResizeBuffers()
 				IMAGE_LAYOUT_SHADER_RESOURCE
 			)
 		);
-		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtGbuffer[GBUFFER_VELOCITY], RenderPassAttachment::LOADOP_DONTCARE));
+		// GG: the velocity cleared (to 0) rather than left: a terrain prepass drawn depth only (SetTerrainDepthOnlyPrepass)
+		// writes none, where its pixel shader wrote 0
+		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtGbuffer[GBUFFER_VELOCITY], RenderPassAttachment::LOADOP_CLEAR));
 		if (getMSAASampleCount() > 1)
 		{
 			desc.attachments.push_back(RenderPassAttachment::Resolve(GetGbuffer_Read(GBUFFER_VELOCITY)));
