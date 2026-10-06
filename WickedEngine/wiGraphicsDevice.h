@@ -17,6 +17,16 @@ struct WickedDeviceCallInfo
 	uint32_t format = 0;
 };
 extern void (*g_pfnWickedDeviceCall)(double dMilliseconds, const WickedDeviceCallInfo& info);
+// GG: hooks for the game's own GPU timing (set by the game, null for none): a command list begun, on the thread that
+// begins it; each list just before the submit finishes it, and the submit's start and end, on the main thread; and a
+// named span inside a list, WickedGpuRangeBegin giving its id (-1 for none) for WickedGpuRangeEnd
+extern void (*g_pfnWickedListBegin)(uint8_t cmd, const char* tag);
+extern void (*g_pfnWickedListFinish)(uint8_t cmd);
+extern void (*g_pfnWickedSubmit)(bool bEnd);
+extern int (*g_pfnWickedGpuRangeBegin)(uint8_t cmd, const char* name);
+extern void (*g_pfnWickedGpuRangeEnd)(uint8_t cmd, int range);
+inline int WickedGpuRangeBegin(uint8_t cmd, const char* name) { return g_pfnWickedGpuRangeBegin ? g_pfnWickedGpuRangeBegin(cmd, name) : -1; }
+inline void WickedGpuRangeEnd(uint8_t cmd, int range) { if (range >= 0 && g_pfnWickedGpuRangeEnd) g_pfnWickedGpuRangeEnd(cmd, range); }
 #endif
 
 namespace wiGraphics

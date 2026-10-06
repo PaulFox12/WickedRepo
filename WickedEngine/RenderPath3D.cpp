@@ -1095,12 +1095,24 @@ void RenderPath3D::Render(int mode) const
 		if (!g_bNoTerrainRender)
 		{
 			auto range2 = wiProfiler::BeginRangeGPU("Z-Prepass - Terrain", cmd);
-			GGTerrain::GGTerrain_Draw_Prepass(&camera->frustum, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Terrain"); // GG
+				GGTerrain::GGTerrain_Draw_Prepass(&camera->frustum, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 			wiProfiler::EndRange(range2);
 
-			GGTrees::GGTrees_Draw_Prepass(&camera->frustum, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Trees"); // GG
+				GGTrees::GGTrees_Draw_Prepass(&camera->frustum, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 
-			GGGrass::GGGrass_Draw_Prepass(&camera->frustum, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Grass"); // GG
+				GGGrass::GGGrass_Draw_Prepass(&camera->frustum, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 #endif
 
@@ -1576,26 +1588,46 @@ void RenderPath3D::Render(int mode) const
 
 		bindresourcesLock.unlock();
 
-		wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, drawscene_flags);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Objects"); // GG
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, drawscene_flags);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 		wiProfiler::EndRange(range); // Opaque Scene
 
 #ifdef GGREDUCED
 		if (!g_bNoTerrainRender)
 		{
 			auto range2 = wiProfiler::BeginRangeGPU("Opaque - Terrain", cmd);
-			GGTerrain::GGTerrain_Draw(&camera->frustum, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Terrain"); // GG
+				GGTerrain::GGTerrain_Draw(&camera->frustum, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 			wiProfiler::EndRange(range2);
 
-			GGTrees::GGTrees_Draw(&camera->frustum, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Trees"); // GG
+				GGTrees::GGTrees_Draw(&camera->frustum, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 
-			GGGrass::GGGrass_Draw(&camera->frustum, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Grass"); // GG
+				GGGrass::GGGrass_Draw(&camera->frustum, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 #endif
 #ifdef GGREDUCED
 		if (!g_bNoTerrainRender)
 		{
 			range = wiProfiler::BeginRangeGPU("Opaque - Sky", cmd);
-			wiRenderer::DrawSky(*scene, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Sky"); // GG
+				wiRenderer::DrawSky(*scene, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 			wiProfiler::EndRange(range);
 		}
 #endif
@@ -1663,15 +1695,31 @@ void RenderPath3D::Render(int mode) const
 		device->BindViewports(1, &vp, cmd);
 #endif
 
-		RenderLightShafts(cmd, mode);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Light Shafts And Volumetrics"); // GG
+			RenderLightShafts(cmd, mode);
 
-		RenderVolumetrics(cmd);
+			RenderVolumetrics(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
-		RenderSceneMIPChain(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Scene Copy"); // GG
+			RenderSceneMIPChain(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
-		RenderTransparents(cmd, mode);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Transparent"); // GG
+			RenderTransparents(cmd, mode);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
-		RenderPostprocessChain(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Post"); // GG
+			RenderPostprocessChain(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
 #ifdef GGREDUCED
 		RenderOutlineHighlighers(cmd);
@@ -2075,11 +2123,13 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 		wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, drawscene_flags);
 
 #ifdef GGREDUCED
+		int gpuRange = WickedGpuRangeBegin(cmd, "Transparent - Particles"); // GG
 		Tracers::tracer_draw(wiScene::GetCamera(), cmd);
 
 		GPUParticles::gpup_draw_bydistance(wiScene::GetCamera(), cmd, 0.0f);
 
 		wiRenderer::DrawSoftParticles_Distance(visibility_main, false, cmd,0.0f);
+		WickedGpuRangeEnd(cmd, gpuRange); // GG
 
 		// repair constant buffers changed by particle shader
 		//BindCommonResources(cmd);
@@ -2094,7 +2144,11 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 		if (!g_bNoTerrainRender)
 		{
 			auto range2 = wiProfiler::BeginRangeGPU("Transparent - Terrain", cmd);
-			GGTerrain::GGTerrain_Draw_Transparent(&camera->frustum, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Transparent - Terrain"); // GG
+				GGTerrain::GGTerrain_Draw_Transparent(&camera->frustum, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 			wiProfiler::EndRange(range2);
 		}
 #endif

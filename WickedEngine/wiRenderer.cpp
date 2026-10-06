@@ -7503,7 +7503,9 @@ void DrawScene(
 	{
 		if (ocean && vis.scene->weather.IsOceanEnabled() )
 		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Ocean"); // GG
 			vis.scene->ocean.Render(*vis.camera, vis.scene->weather.oceanParameters, cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
 		}
 	}
 #else

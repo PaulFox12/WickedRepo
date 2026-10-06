@@ -36,6 +36,11 @@ using namespace Microsoft::WRL;
 // and present took, in milliseconds,
 // on whichever thread made it (a probe for frame stalls inside the driver)
 void (*g_pfnWickedDeviceCall)(double dMilliseconds, const WickedDeviceCallInfo& info) = nullptr;
+void (*g_pfnWickedListBegin)(uint8_t cmd, const char* tag) = nullptr;
+void (*g_pfnWickedListFinish)(uint8_t cmd) = nullptr;
+void (*g_pfnWickedSubmit)(bool bEnd) = nullptr;
+int (*g_pfnWickedGpuRangeBegin)(uint8_t cmd, const char* name) = nullptr;
+void (*g_pfnWickedGpuRangeEnd)(uint8_t cmd, int range) = nullptr;
 struct WickedDeviceCallTimer
 {
 	LARGE_INTEGER start;
@@ -2963,6 +2968,11 @@ CommandList GraphicsDevice_DX11::BeginCommandList(QUEUE_TYPE queue, const char* 
 
 	}
 
+#ifdef GGREDUCED
+	// GG: the list's start, for the game's GPU timing
+	if (g_pfnWickedListBegin && cmd < COMMANDLIST_COUNT) g_pfnWickedListBegin(cmd, tag);
+#endif
+
 	BindPipelineState(nullptr, cmd);
 	BindComputeShader(nullptr, cmd);
 
@@ -3033,12 +3043,18 @@ void GraphicsDevice_DX11::SubmitCommandLists()
 	const int disjoint_write = FRAMECOUNT % arraysize(disjointQueries);
 	const int disjoint_read = (FRAMECOUNT + 1) % arraysize(disjointQueries);
 	immediateContext->Begin(disjointQueries[disjoint_write].Get());
+#ifdef GGREDUCED
+	if (g_pfnWickedSubmit) g_pfnWickedSubmit(false);
+#endif
 
 	// Execute deferred command lists:
 	CommandList cmd_last = cmd_count.load();
 	cmd_count.store(0);
 	for (CommandList cmd = 0; cmd < cmd_last; ++cmd)
 	{
+#ifdef GGREDUCED
+		if (g_pfnWickedListFinish) g_pfnWickedListFinish(cmd);
+#endif
 		HRESULT hr = deviceContexts[cmd]->FinishCommandList(false, &commandLists[cmd]);
 		assert(SUCCEEDED(hr));
 #ifdef GGREDUCED
@@ -3121,6 +3137,9 @@ void GraphicsDevice_DX11::SubmitCommandLists()
 		TIMESTAMP_FREQUENCY = disjoint.Frequency;
 	}
 
+#ifdef GGREDUCED
+	if (g_pfnWickedSubmit) g_pfnWickedSubmit(true);
+#endif
 	if (g_enablePixMarkers) PIXEndEvent();
 	FRAMECOUNT++;
 }
