@@ -4966,6 +4966,7 @@ void UpdateRenderData(
 
 	BindCommonResources(cmd);
 
+	int gpuRange = WickedGpuRangeBegin(cmd, "Setup - Materials"); // GG: the frame set up's parts, for the game's GPU timing
 	// Update dirty material constant buffers:
 	for (size_t i = 0; i < vis.scene->materials.GetCount(); ++i)
 	{
@@ -4980,6 +4981,8 @@ void UpdateRenderData(
 		}
 	}
 
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Entities"); // GG: the frame set up's parts, for the game's GPU timing
 	// Fill Entity Array with decals + envprobes + lights in the frustum:
 	{
 		// Reserve temporary entity array for GPU data upload:
@@ -5480,6 +5483,8 @@ void UpdateRenderData(
 		GetRenderFrameAllocator(cmd).free(sizeof(XMMATRIX)*MATRIXARRAY_COUNT);
 	}
 
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Skinning"); // GG: the frame set up's parts, for the game's GPU timing
 	auto range = wiProfiler::BeginRangeGPU("Skinning", cmd);
 	device->EventBegin("Skinning", cmd);
 	{
@@ -5634,6 +5639,7 @@ void UpdateRenderData(
 	}
 	device->EventEnd(cmd);
 	wiProfiler::EndRange(range); // skinning
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
 
 #ifndef GGREDUCED //PE: Remove all physics checks, we dont use it.
 	// Soft body updates:
@@ -5651,6 +5657,7 @@ void UpdateRenderData(
 	}
 #endif
 
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Particles"); // GG: the frame set up's parts, for the game's GPU timing
 	// GPU Particle systems simulation/sorting/culling:
 	if (!vis.visibleEmitters.empty())
 	{
@@ -5696,6 +5703,8 @@ void UpdateRenderData(
 	}
 #endif
 
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Ocean"); // GG: the frame set up's parts, for the game's GPU timing
 	// Compute water simulation:
 	if (vis.scene->weather.IsOceanEnabled())
 	{
@@ -5704,6 +5713,8 @@ void UpdateRenderData(
 		wiProfiler::EndRange(range);
 	}
 
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Sky"); // GG: the frame set up's parts, for the game's GPU timing
 	if (vis.scene->weather.IsRealisticSky())
 	{
 		// Render Atmospheric Scattering textures for lighting and sky
@@ -5711,6 +5722,8 @@ void UpdateRenderData(
 	}
 
 
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
+	gpuRange = WickedGpuRangeBegin(cmd, "Setup - Clouds Precompute"); // GG: the frame set up's parts, for the game's GPU timing
 	// Precompute static volumetric cloud textures:
 	if (!volumetric_clouds_precomputed && vis.scene->weather.IsVolumetricClouds())
 	{
@@ -5841,6 +5854,7 @@ void UpdateRenderData(
 		}
 		volumetric_clouds_precomputed = true;
 	}
+	WickedGpuRangeEnd(cmd, gpuRange); // GG
 }
 void UpdateRaytracingAccelerationStructures(const Scene& scene, CommandList cmd)
 {
