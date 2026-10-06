@@ -1084,10 +1084,18 @@ void RenderPath3D::Render(int mode) const
 		device->BindViewports(1, &vp, cmd);
 
 		auto range = wiProfiler::BeginRangeGPU("Z-Prepass - Scene", cmd);
-		wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, drawscene_flags);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Objects"); // GG
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, drawscene_flags);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
 		// write depth for transparent objects that are solid (opaque=100%) like guns and solid doors with windows in		
-		wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, wiRenderer::DRAWSCENE_TRANSPARENT);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Transparent Objects"); // GG
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, wiRenderer::DRAWSCENE_TRANSPARENT);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
 		wiProfiler::EndRange(range);
 
@@ -1117,14 +1125,22 @@ void RenderPath3D::Render(int mode) const
 #endif
 
 		range = wiProfiler::BeginRangeGPU("Z-Prepass - Sky Velocity", cmd);
-		wiRenderer::DrawSkyVelocity(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Sky Velocity"); // GG
+			wiRenderer::DrawSkyVelocity(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 		wiProfiler::EndRange(range);
 		
 		device->EventEnd(cmd);
 
 		if (getOcclusionCullingEnabled())
 		{
-			wiRenderer::OcclusionCulling_Render(*camera, visibility_main, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Occlusion Culling"); // GG
+				wiRenderer::OcclusionCulling_Render(*camera, visibility_main, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 
 		device->RenderPassEnd(cmd);
@@ -1132,7 +1148,11 @@ void RenderPath3D::Render(int mode) const
 #ifdef GGREDUCED
 		if (!g_bNoTerrainRender)
 		{
-			if ( mode != EYE_RIGHT ) GGTerrain::GGTerrain_VirtualTexReadBack(rtVirtualTextureReadBack, getMSAASampleCount(), cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Terrain Feedback"); // GG
+				if ( mode != EYE_RIGHT ) GGTerrain::GGTerrain_VirtualTexReadBack(rtVirtualTextureReadBack, getMSAASampleCount(), cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 #endif
 		});
@@ -1158,16 +1178,32 @@ void RenderPath3D::Render(int mode) const
 		// Create the top mip of depth pyramid from main depth buffer:
 		if (getMSAASampleCount() > 1)
 		{
-			wiRenderer::ResolveMSAADepthBuffer(depthBuffer_Copy, depthBuffer_Main, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Depth Copy"); // GG
+				wiRenderer::ResolveMSAADepthBuffer(depthBuffer_Copy, depthBuffer_Main, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 		else
 		{
-			wiRenderer::CopyTexture2D(depthBuffer_Copy, 0, 0, 0, depthBuffer_Main, 0, cmd);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Depth Copy"); // GG
+				wiRenderer::CopyTexture2D(depthBuffer_Copy, 0, 0, 0, depthBuffer_Main, 0, cmd);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 
-		wiRenderer::Postprocess_DepthPyramid(depthBuffer_Copy, rtLinearDepth, cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Depth Pyramid"); // GG
+			wiRenderer::Postprocess_DepthPyramid(depthBuffer_Copy, rtLinearDepth, cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
-		RenderAO(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "AO"); // GG
+			RenderAO(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 #ifndef GGREDUCED
 		if (wiRenderer::GetVariableRateShadingClassification() && device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_VARIABLE_RATE_SHADING_TIER2))
 		{
@@ -1211,11 +1247,15 @@ void RenderPath3D::Render(int mode) const
 					cmd
 				);
 
-				wiRenderer::Postprocess_VolumetricClouds(
-					volumetriccloudResources[cloudIndex],
-					depthBuffer_Copy,
-					cmd
-				);
+				{
+					int gpuRange = WickedGpuRangeBegin(cmd, "Volumetric Clouds"); // GG
+					wiRenderer::Postprocess_VolumetricClouds(
+						volumetriccloudResources[cloudIndex],
+						depthBuffer_Copy,
+						cmd
+					);
+					WickedGpuRangeEnd(cmd, gpuRange); // GG
+				}
 
 				wiRenderer::UpdateCameraCB(
 					*camera,
@@ -1227,30 +1267,42 @@ void RenderPath3D::Render(int mode) const
 		}
 	{
 			auto range = wiProfiler::BeginRangeGPU("Entity Culling", cmd);
-			wiRenderer::ComputeTiledLightCulling(
-				tiledLightResources,
-				depthBuffer_Copy,
-				debugUAV,
-				cmd
-			);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Light Culling"); // GG
+				wiRenderer::ComputeTiledLightCulling(
+					tiledLightResources,
+					depthBuffer_Copy,
+					debugUAV,
+					cmd
+				);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 			wiProfiler::EndRange(range);
 		}
 
-		RenderSSR(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "SSR"); // GG
+			RenderSSR(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
 #ifndef REMOVE_RAY_TRACED_SHADOW
 		if (wiRenderer::GetScreenSpaceShadowsEnabled())
 		{
-			wiRenderer::Postprocess_ScreenSpaceShadow(
-				screenspaceshadowResources,
-				depthBuffer_Copy,
-				rtLinearDepth,
-				tiledLightResources.entityTiles_Opaque,
-				rtShadow,
-				cmd,
-				getScreenSpaceShadowRange(),
-				getScreenSpaceShadowSampleCount()
-			);
+			{
+				int gpuRange = WickedGpuRangeBegin(cmd, "Screen Space Shadows"); // GG
+				wiRenderer::Postprocess_ScreenSpaceShadow(
+					screenspaceshadowResources,
+					depthBuffer_Copy,
+					rtLinearDepth,
+					tiledLightResources.entityTiles_Opaque,
+					rtShadow,
+					cmd,
+					getScreenSpaceShadowRange(),
+					getScreenSpaceShadowSampleCount()
+				);
+				WickedGpuRangeEnd(cmd, gpuRange); // GG
+			}
 		}
 
 		if (wiRenderer::GetRaytracedShadowsEnabled())
@@ -1631,7 +1683,11 @@ void RenderPath3D::Render(int mode) const
 			wiProfiler::EndRange(range);
 		}
 #endif
-		RenderOutline(cmd);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Outline"); // GG
+			RenderOutline(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 
 		// Upsample + Blend the volumetric clouds on top:
 #ifdef GGREDUCED
@@ -1640,13 +1696,17 @@ void RenderPath3D::Render(int mode) const
 			if (scene->weather.IsVolumetricClouds() && camera->Eye.y <= (scene->weather.volumetricCloudParameters.CloudStartHeight * 39.37f) + 500)
 			{
 				device->EventBegin("Volumetric Clouds Upsample + Blend", cmd);
-				wiRenderer::Postprocess_Upsample_Bilateral(
-					volumetriccloudResources[cloudIndex].texture_temporal[device->GetFrameCount() % 2],
-					rtLinearDepth,
-					*GetGbuffer_Read(GBUFFER_COLOR), // only desc is taken if pixel shader upsampling is used
-					cmd,
-					true // pixel shader upsampling
-				);
+				{
+					int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Clouds Blend"); // GG
+					wiRenderer::Postprocess_Upsample_Bilateral(
+						volumetriccloudResources[cloudIndex].texture_temporal[device->GetFrameCount() % 2],
+						rtLinearDepth,
+						*GetGbuffer_Read(GBUFFER_COLOR), // only desc is taken if pixel shader upsampling is used
+						cmd,
+						true // pixel shader upsampling
+					);
+					WickedGpuRangeEnd(cmd, gpuRange); // GG
+				}
 				device->EventEnd(cmd);
 			}
 		}
@@ -1659,7 +1719,11 @@ void RenderPath3D::Render(int mode) const
 			clippedCamera.clipPlane = XMFLOAT4(0, clippedCamera.Eye.y > waterHieght ? -1 : 1, 0, waterHieght);
 
 		wiRenderer::UpdateCameraCB(clippedCamera, *previousCamera, camera_reflection, cmd);
-		wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, (drawscene_flags & ~wiRenderer::DRAWSCENE_OPAQUE) | wiRenderer::DRAWSCENE_TRANSPARENT);
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Opaque - Transparent Objects"); // GG
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, (drawscene_flags & ~wiRenderer::DRAWSCENE_OPAQUE) | wiRenderer::DRAWSCENE_TRANSPARENT);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
 		wiRenderer::UpdateCameraCB(*camera, *previousCamera, camera_reflection, cmd);
 		device->RenderPassEnd(cmd);
 
