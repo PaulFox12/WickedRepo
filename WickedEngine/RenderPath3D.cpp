@@ -171,12 +171,16 @@ void RenderPath3D::CheckUsedTextures(bool force)
 		}
 	}
 
+	// GG: the second HDR target, full size for a pass chained after another (motion blur, depth of field, the screen lens
+	// flare after the bloom), else 4x4; made again only when that changes (the || bound looser than the !=, so it was made
+	// again every frame while depth of field was on)
+	const bool bFullHDR1 = getMotionBlurEnabled() || getDepthOfFieldEnabled() || getScreenLensFlareEnabled();
 	static int current_hdr1 = -1;
-	if(force || current_hdr1 != getMotionBlurEnabled() || getDepthOfFieldEnabled())
+	if(force || current_hdr1 != (bFullHDR1 ? 1 : 0))
 	{
 		GraphicsDevice* device = wiRenderer::GetDevice();
-		current_hdr1 = getMotionBlurEnabled() || getDepthOfFieldEnabled();
-		if (getMotionBlurEnabled() || getDepthOfFieldEnabled())
+		current_hdr1 = bFullHDR1 ? 1 : 0;
+		if (bFullHDR1)
 		{
 			XMUINT2 internalResolution;
 			internalResolution.x = GetWidth3D();
