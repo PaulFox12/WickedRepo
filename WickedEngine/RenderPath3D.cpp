@@ -2412,21 +2412,23 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 			device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
 		}
 
-		// GG: the screen-space lens flare from the image's bright spots, before the tone map
+		// GG: the screen-space lens flare from the image's bright spots, before the tone map; following the bloom, what
+		// blooms flares, from the bloom's threshold and cap
 		if (getScreenLensFlareEnabled())
 		{
+			const bool followBloom = getScreenLensFlareFollowBloom();
 			wiRenderer::Postprocess_ScreenLensFlare(
 				screenLensFlareResources,
 				rt_first == nullptr ? *rt_read : *rt_first,
 				*rt_write,
 				depthBuffer_Copy,
 				cmd,
-				getScreenLensFlareThreshold(),
+				followBloom ? getBloomThreshold() : getScreenLensFlareThreshold(),
 				getScreenLensFlareIntensity(),
 				getScreenLensFlareSpacing(),
 				getScreenLensFlareHalo(),
 				getScreenLensFlareNoSky(),
-				getScreenLensFlareCap()
+				followBloom ? getBloomCap() : getScreenLensFlareCap()
 			);
 			rt_first = nullptr;
 
