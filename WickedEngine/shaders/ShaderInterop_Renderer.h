@@ -772,6 +772,7 @@ CBUFFER(LensFlareCB, CBSLOT_RENDERER_LENSFLARE)
 	float xLensFlareOffset;
 	float2 xLensFlareSize;
 	float2 xLensFlare_padding;
+	float4 xLensFlareColor; // GG: rgb the light's hue and brightness the flare takes (white as before)
 };
 
 struct CubemapRenderCam

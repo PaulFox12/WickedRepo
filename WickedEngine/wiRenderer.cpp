@@ -6569,6 +6569,19 @@ void DrawVolumeLights(
 
 
 }
+// GG: the lens flare's light colour (SetLensFlareLightColour)
+static float g_fLensFlareLightHue = 1.0f;
+static float g_fLensFlareLightBrightness = 1.0f;
+static float g_fLensFlareEnergyReference = 0.0f;
+void SetLensFlareLightColour(float hue, float brightness)
+{
+	g_fLensFlareLightHue = std::max(0.0f, std::min(1.0f, hue));
+	g_fLensFlareLightBrightness = std::max(0.0f, std::min(1.0f, brightness));
+}
+float GetLensFlareLightHue() { return g_fLensFlareLightHue; }
+float GetLensFlareLightBrightness() { return g_fLensFlareLightBrightness; }
+void SetLensFlareEnergyReference(float energy) { g_fLensFlareEnergyReference = energy; }
+
 void DrawLensFlares(
 	const Visibility& vis,
 	const Texture& depthbuffer,
@@ -6623,12 +6636,25 @@ void DrawLensFlares(
 			{
 				device->BindPipelineState(&PSO_lensflare, cmd);
 				device->BindConstantBuffer(VS, &constantBuffers[CBTYPE_LENSFLARE], CB_GETBINDSLOT(LensFlareCB), cmd);
+				device->BindConstantBuffer(PS, &constantBuffers[CBTYPE_LENSFLARE], CB_GETBINDSLOT(LensFlareCB), cmd); // GG: its colour
 
 				// Get the screen position of the flare:
 				XMVECTOR flarePos = XMVector3Project(POS, 0, 0, 1, 1, 1, 0, vis.camera->GetProjection(), vis.camera->GetView(), XMMatrixIdentity());
 
 				LensFlareCB cb;
 				XMStoreFloat3(&cb.xLensFlarePos, flarePos);
+				// GG: the light's hue (its brightest channel 1) and its brightness against the level's sun, blended in by
+				// SetLensFlareLightColour; a red horizon sun gives a dimmer red flare
+				{
+					float fBrightest = std::max(light.color.x, std::max(light.color.y, light.color.z));
+					XMFLOAT3 hue = fBrightest > 0 ? XMFLOAT3(light.color.x / fBrightest, light.color.y / fBrightest, light.color.z / fBrightest) : XMFLOAT3(1, 1, 1);
+					float fBrightness = g_fLensFlareEnergyReference > 0 ? std::max(0.0f, std::min(2.0f, light.energy / g_fLensFlareEnergyReference)) : 1.0f;
+					fBrightness = 1.0f + (fBrightness - 1.0f) * g_fLensFlareLightBrightness;
+					cb.xLensFlareColor.x = (1.0f + (hue.x - 1.0f) * g_fLensFlareLightHue) * fBrightness;
+					cb.xLensFlareColor.y = (1.0f + (hue.y - 1.0f) * g_fLensFlareLightHue) * fBrightness;
+					cb.xLensFlareColor.z = (1.0f + (hue.z - 1.0f) * g_fLensFlareLightHue) * fBrightness;
+					cb.xLensFlareColor.w = 1.0f;
+				}
 
 				uint32_t i = 0;
 				for (auto& x : light.lensFlareRimTextures)
@@ -13615,7 +13641,8 @@ void CreateBloomResources(BloomResources& res, XMUINT2 resolution)
 	desc.Format = FORMAT_R11G11B10_FLOAT;
 	desc.Width = resolution.x / 4;
 	desc.Height = resolution.y / 4;
-	desc.MipLevels = std::min(5u, (uint32_t)std::log2(std::max(desc.Width, desc.Height)));
+	// GG: 7 mips (5 before) for SetBloom's radius; the combine's taps without it are the same
+	desc.MipLevels = std::min(7u, (uint32_t)std::log2(std::max(desc.Width, desc.Height)));
 	device->CreateTexture(&desc, nullptr, &res.texture_bloom);
 	device->SetName(&res.texture_bloom, "bloom.texture_bloom");
 	device->CreateTexture(&desc, nullptr, &res.texture_temp);
@@ -13640,7 +13667,9 @@ void Postprocess_Bloom(
 	const Texture& output,
 	CommandList cmd,
 	float threshold,
-	float strength
+	float strength,
+	float radius,
+	float cap
 )
 {
 	device->EventBegin("Postprocess_Bloom", cmd);
@@ -13658,6 +13687,7 @@ void Postprocess_Bloom(
 		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
 		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
 		cb.xPPParams0.x = threshold;
+		cb.xPPParams0.y = cap; // GG
 		device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
 		device->BindConstantBuffer(CS, &constantBuffers[CBTYPE_POSTPROCESS], CB_GETBINDSLOT(PostProcessCB), cmd);
 
@@ -13715,6 +13745,7 @@ void Postprocess_Bloom(
 		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
 		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
 		cb.xPPParams0.x = strength;
+		cb.xPPParams0.y = radius; // GG
 		device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
 		device->BindConstantBuffer(CS, &constantBuffers[CBTYPE_POSTPROCESS], CB_GETBINDSLOT(PostProcessCB), cmd);
 

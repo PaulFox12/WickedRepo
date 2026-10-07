@@ -270,6 +270,12 @@ namespace wiRenderer
 		wiGraphics::CommandList cmd
 	);
 	// Draw Lens Flares for lights that have them enabled
+	// GG: the lens flare takes its light's hue (0 white as before, 1 the light's) and brightness against the level's sun
+	// intensity (0 none as before, 1 full); the reference is the level's sun intensity
+	void SetLensFlareLightColour(float hue, float brightness);
+	float GetLensFlareLightHue();
+	float GetLensFlareLightBrightness();
+	void SetLensFlareEnergyReference(float energy);
 	void DrawLensFlares(
 		const Visibility& vis,
 		const wiGraphics::Texture& depthbuffer,
@@ -572,7 +578,9 @@ namespace wiRenderer
 		const wiGraphics::Texture& output,
 		wiGraphics::CommandList cmd,
 		float threshold = 1.0f,
-		float strength = 1.0f
+		float strength = 1.0f,
+		float radius = 0, // GG: wider halos, 0 as before
+		float cap = 30 // GG: the brightest a sample counts for, 30 as before
 	);
 	struct VolumetricCloudResources
 	{

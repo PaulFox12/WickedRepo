@@ -14,10 +14,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
 	float3 color = 0;
 
-	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.25, 0.25)) * xPPResolution_rcp, 0).rgb, 30 );
-	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.75, 0.25)) * xPPResolution_rcp, 0).rgb, 30 );
-	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.25, 0.75)) * xPPResolution_rcp, 0).rgb, 30 );
-	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.75, 0.75)) * xPPResolution_rcp, 0).rgb, 30 );
+	// GG: the brightest a sample counts for (SetBloom's cap), 30 as before
+	const float bloomCap = xPPParams0.y;
+
+	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.25, 0.25)) * xPPResolution_rcp, 0).rgb, bloomCap );
+	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.75, 0.25)) * xPPResolution_rcp, 0).rgb, bloomCap );
+	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.25, 0.75)) * xPPResolution_rcp, 0).rgb, bloomCap );
+	color += min( input.SampleLevel(sampler_linear_clamp, (uv + float2(0.75, 0.75)) * xPPResolution_rcp, 0).rgb, bloomCap );
 
 	color /= 4.0f;
 

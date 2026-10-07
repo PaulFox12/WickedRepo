@@ -2389,7 +2389,9 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 				*rt_write,
 				cmd,
 				getBloomThreshold(),
-				getBloomStrength()
+				getBloomStrength(),
+				getBloomRadius(),
+				getBloomCap()
 			);
 			rt_first = nullptr;
 
