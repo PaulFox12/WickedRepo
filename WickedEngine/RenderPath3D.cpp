@@ -89,6 +89,11 @@ namespace Tracers
 {
 	extern "C" void tracer_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd);
 }
+// GG: the batched rain ripples (GameGuru's RippleManager)
+namespace Ripples
+{
+	extern "C" void ripple_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd);
+}
 
 #endif
 
@@ -2196,6 +2201,7 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 #ifdef GGREDUCED
 		int gpuRange = WickedGpuRangeBegin(cmd, "Transparent - Particles"); // GG
 		Tracers::tracer_draw(wiScene::GetCamera(), cmd);
+		Ripples::ripple_draw(wiScene::GetCamera(), cmd); // GG
 
 		GPUParticles::gpup_draw_bydistance(wiScene::GetCamera(), cmd, 0.0f);
 
