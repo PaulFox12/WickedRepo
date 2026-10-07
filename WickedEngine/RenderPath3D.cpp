@@ -2425,7 +2425,8 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 				getScreenLensFlareIntensity(),
 				getScreenLensFlareSpacing(),
 				getScreenLensFlareHalo(),
-				getScreenLensFlareNoSky()
+				getScreenLensFlareNoSky(),
+				getScreenLensFlareCap()
 			);
 			rt_first = nullptr;
 

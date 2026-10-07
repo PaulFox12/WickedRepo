@@ -13694,7 +13694,8 @@ void Postprocess_ScreenLensFlare(
 	float intensity,
 	float spacing,
 	float haloRadius,
-	bool noSky
+	bool noSky,
+	float cap
 )
 {
 	device->EventBegin("Postprocess_ScreenLensFlare", cmd);
@@ -13709,7 +13710,7 @@ void Postprocess_ScreenLensFlare(
 		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
 		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
 		cb.xPPParams0.x = threshold;
-		cb.xPPParams0.y = 200.0f;
+		cb.xPPParams0.y = cap;
 		cb.xPPParams0.z = noSky ? 1.0f : 0.0f;
 		device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_SSFLARE_BRIGHT], cmd);
 		device->BindResource(CS, &input, TEXSLOT_ONDEMAND0, cmd);

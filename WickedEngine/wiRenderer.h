@@ -602,7 +602,8 @@ namespace wiRenderer
 		float intensity,
 		float spacing,
 		float haloRadius,
-		bool noSky
+		bool noSky,
+		float cap = 200 // the brightest a sample counts for before the threshold is taken off
 	);
 	struct VolumetricCloudResources
 	{

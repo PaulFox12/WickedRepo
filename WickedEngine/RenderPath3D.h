@@ -88,6 +88,7 @@ private:
 	float screenLensFlareSpacing = 0.35f;
 	float screenLensFlareHalo = 0.45f;
 	bool screenLensFlareNoSky = true;
+	float screenLensFlareCap = 200.0f;
 	bool motionBlurEnabled = false;
 	bool depthOfFieldEnabled = false; //PE: was true use our defaults
 	bool eyeAdaptionEnabled = false;
@@ -283,6 +284,7 @@ public:
 	constexpr float getScreenLensFlareSpacing() const { return screenLensFlareSpacing; }
 	constexpr float getScreenLensFlareHalo() const { return screenLensFlareHalo; }
 	constexpr bool getScreenLensFlareNoSky() const { return screenLensFlareNoSky; }
+	constexpr float getScreenLensFlareCap() const { return screenLensFlareCap; }
 	constexpr bool getMotionBlurEnabled() const { return motionBlurEnabled; }
 	constexpr bool getDepthOfFieldEnabled() const { return depthOfFieldEnabled; }
 	constexpr bool getEyeAdaptionEnabled() const { return eyeAdaptionEnabled; }
@@ -355,6 +357,7 @@ public:
 	constexpr void setScreenLensFlareSpacing(float value){ screenLensFlareSpacing = value; }
 	constexpr void setScreenLensFlareHalo(float value){ screenLensFlareHalo = value; }
 	constexpr void setScreenLensFlareNoSky(bool value){ screenLensFlareNoSky = value; }
+	constexpr void setScreenLensFlareCap(float value){ screenLensFlareCap = value; }
 	constexpr void setMotionBlurEnabled(bool value){ motionBlurEnabled = value; }
 	constexpr void setDepthOfFieldEnabled(bool value){ depthOfFieldEnabled = value; }
 	constexpr void setEyeAdaptionEnabled(bool value) { eyeAdaptionEnabled = value; }
