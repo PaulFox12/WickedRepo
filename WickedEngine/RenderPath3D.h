@@ -81,6 +81,13 @@ private:
 	bool volumeLightsEnabled = false; //PE: was true use our defaults
 	bool lightShaftsEnabled = false;
 	bool lensFlareEnabled = true;
+	// GG: the screen-space lens flare from the image's bright spots, off as before
+	bool screenLensFlareEnabled = false;
+	float screenLensFlareThreshold = 4.0f;
+	float screenLensFlareIntensity = 0.1f;
+	float screenLensFlareSpacing = 0.35f;
+	float screenLensFlareHalo = 0.45f;
+	bool screenLensFlareNoSky = true;
 	bool motionBlurEnabled = false;
 	bool depthOfFieldEnabled = false; //PE: was true use our defaults
 	bool eyeAdaptionEnabled = false;
@@ -156,6 +163,7 @@ public:
 	wiRenderer::VolumetricCloudResources volumetriccloudResources[2]; // one each for left and right eyes
 	wiRenderer::VolumetricCloudResources volumetriccloudResources_reflection[2]; // one each for left and right eyes
 	wiRenderer::BloomResources bloomResources;
+	wiRenderer::ScreenLensFlareResources screenLensFlareResources; // GG
 
 	const constexpr wiGraphics::Texture* GetGbuffer_Read() const
 	{
@@ -269,6 +277,12 @@ public:
 	constexpr bool getVolumeLightsEnabled() const { return volumeLightsEnabled; }
 	constexpr bool getLightShaftsEnabled() const { return lightShaftsEnabled; }
 	constexpr bool getLensFlareEnabled() const { return lensFlareEnabled; }
+	constexpr bool getScreenLensFlareEnabled() const { return screenLensFlareEnabled; }
+	constexpr float getScreenLensFlareThreshold() const { return screenLensFlareThreshold; }
+	constexpr float getScreenLensFlareIntensity() const { return screenLensFlareIntensity; }
+	constexpr float getScreenLensFlareSpacing() const { return screenLensFlareSpacing; }
+	constexpr float getScreenLensFlareHalo() const { return screenLensFlareHalo; }
+	constexpr bool getScreenLensFlareNoSky() const { return screenLensFlareNoSky; }
 	constexpr bool getMotionBlurEnabled() const { return motionBlurEnabled; }
 	constexpr bool getDepthOfFieldEnabled() const { return depthOfFieldEnabled; }
 	constexpr bool getEyeAdaptionEnabled() const { return eyeAdaptionEnabled; }
@@ -335,6 +349,12 @@ public:
 	constexpr void setVolumeLightsEnabled(bool value){ volumeLightsEnabled = value; }
 	constexpr void setLightShaftsEnabled(bool value){ lightShaftsEnabled = value; }
 	constexpr void setLensFlareEnabled(bool value){ lensFlareEnabled = value; }
+	constexpr void setScreenLensFlareEnabled(bool value){ screenLensFlareEnabled = value; }
+	constexpr void setScreenLensFlareThreshold(float value){ screenLensFlareThreshold = value; }
+	constexpr void setScreenLensFlareIntensity(float value){ screenLensFlareIntensity = value; }
+	constexpr void setScreenLensFlareSpacing(float value){ screenLensFlareSpacing = value; }
+	constexpr void setScreenLensFlareHalo(float value){ screenLensFlareHalo = value; }
+	constexpr void setScreenLensFlareNoSky(bool value){ screenLensFlareNoSky = value; }
 	constexpr void setMotionBlurEnabled(bool value){ motionBlurEnabled = value; }
 	constexpr void setDepthOfFieldEnabled(bool value){ depthOfFieldEnabled = value; }
 	constexpr void setEyeAdaptionEnabled(bool value) { eyeAdaptionEnabled = value; }

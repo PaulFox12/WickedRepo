@@ -164,6 +164,15 @@
     <FxCompile Include="$(MSBuildThisFileDirectory)blur_gaussian_float4CS.hlsl">
       <Filter>CS</Filter>
     </FxCompile>
+    <FxCompile Include="$(MSBuildThisFileDirectory)ssflare_brightCS.hlsl">
+      <Filter>CS</Filter>
+    </FxCompile>
+    <FxCompile Include="$(MSBuildThisFileDirectory)ssflare_ghostsCS.hlsl">
+      <Filter>CS</Filter>
+    </FxCompile>
+    <FxCompile Include="$(MSBuildThisFileDirectory)ssflare_combineCS.hlsl">
+      <Filter>CS</Filter>
+    </FxCompile>
     <FxCompile Include="$(MSBuildThisFileDirectory)bloomseparateCS.hlsl">
       <Filter>CS</Filter>
     </FxCompile>

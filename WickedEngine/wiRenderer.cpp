@@ -1536,6 +1536,9 @@ void LoadShaders()
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_MOTIONBLUR_CHEAP], "motionblurCS_cheap.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_BLOOMSEPARATE], "bloomseparateCS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_BLOOMCOMBINE], "bloomcombineCS.cso"); });
+	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_SSFLARE_BRIGHT], "ssflare_brightCS.cso"); }); // GG
+	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_SSFLARE_GHOSTS], "ssflare_ghostsCS.cso"); }); // GG
+	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_SSFLARE_COMBINE], "ssflare_combineCS.cso"); }); // GG
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_VOLUMETRICCLOUDS_SHAPENOISE], "volumetricCloud_shapenoiseCS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_VOLUMETRICCLOUDS_DETAILNOISE], "volumetricCloud_detailnoiseCS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_VOLUMETRICCLOUDS_CURLNOISE], "volumetricCloud_curlnoiseCS.cso"); });
@@ -13634,6 +13637,137 @@ void Postprocess_MotionBlur(
 	wiProfiler::EndRange(range);
 	device->EventEnd(cmd);
 }
+// GG: the screen-space lens flare (ScreenLensFlareResources)
+void CreateScreenLensFlareResources(ScreenLensFlareResources& res, XMUINT2 resolution)
+{
+	TextureDesc desc;
+	desc.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+	desc.Format = FORMAT_R11G11B10_FLOAT;
+	desc.Width = std::max(1u, resolution.x / 4);
+	desc.Height = std::max(1u, resolution.y / 4);
+	desc.MipLevels = std::min(3u, std::max(1u, (uint32_t)std::log2(std::max(desc.Width, desc.Height))));
+	device->CreateTexture(&desc, nullptr, &res.texture_bright);
+	device->SetName(&res.texture_bright, "ssflare.texture_bright");
+	device->CreateTexture(&desc, nullptr, &res.texture_temp);
+	device->SetName(&res.texture_temp, "ssflare.texture_temp");
+	for (uint32_t i = 0; i < res.texture_bright.desc.MipLevels; ++i)
+	{
+		int subresource_index;
+		subresource_index = device->CreateSubresource(&res.texture_bright, SRV, 0, 1, i, 1);
+		assert(subresource_index == i);
+		subresource_index = device->CreateSubresource(&res.texture_temp, SRV, 0, 1, i, 1);
+		assert(subresource_index == i);
+		subresource_index = device->CreateSubresource(&res.texture_bright, UAV, 0, 1, i, 1);
+		assert(subresource_index == i);
+		subresource_index = device->CreateSubresource(&res.texture_temp, UAV, 0, 1, i, 1);
+		assert(subresource_index == i);
+	}
+	desc.MipLevels = 1;
+	device->CreateTexture(&desc, nullptr, &res.texture_flare);
+	device->SetName(&res.texture_flare, "ssflare.texture_flare");
+}
+static void ScreenLensFlare_Dispatch(const Texture& target, const PostProcessCB& cb, CommandList cmd)
+{
+	device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
+	device->BindConstantBuffer(CS, &constantBuffers[CBTYPE_POSTPROCESS], CB_GETBINDSLOT(PostProcessCB), cmd);
+	const GPUResource* uavs[] = { &target };
+	device->BindUAVs(CS, uavs, 0, arraysize(uavs), cmd);
+	{
+		GPUBarrier barriers[] = { GPUBarrier::Image(&target, target.desc.layout, IMAGE_LAYOUT_UNORDERED_ACCESS) };
+		device->Barrier(barriers, arraysize(barriers), cmd);
+	}
+	const TextureDesc& desc = target.GetDesc();
+	device->Dispatch((desc.Width + POSTPROCESS_BLOCKSIZE - 1) / POSTPROCESS_BLOCKSIZE, (desc.Height + POSTPROCESS_BLOCKSIZE - 1) / POSTPROCESS_BLOCKSIZE, 1, cmd);
+	{
+		GPUBarrier barriers[] = { GPUBarrier::Memory(), GPUBarrier::Image(&target, IMAGE_LAYOUT_UNORDERED_ACCESS, target.desc.layout) };
+		device->Barrier(barriers, arraysize(barriers), cmd);
+	}
+	device->UnbindUAVs(0, arraysize(uavs), cmd);
+}
+void Postprocess_ScreenLensFlare(
+	const ScreenLensFlareResources& res,
+	const Texture& input,
+	const Texture& output,
+	const Texture& depth,
+	CommandList cmd,
+	float threshold,
+	float intensity,
+	float spacing,
+	float haloRadius,
+	bool noSky
+)
+{
+	device->EventBegin("Postprocess_ScreenLensFlare", cmd);
+
+	// the bright parts at a quarter of the resolution, each sample capped so the sun or a missile doesn't swamp it
+	{
+		device->EventBegin("Screen Lens Flare Bright", cmd);
+		const TextureDesc& desc = res.texture_bright.GetDesc();
+		PostProcessCB cb;
+		cb.xPPResolution.x = desc.Width;
+		cb.xPPResolution.y = desc.Height;
+		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
+		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
+		cb.xPPParams0.x = threshold;
+		cb.xPPParams0.y = 200.0f;
+		cb.xPPParams0.z = noSky ? 1.0f : 0.0f;
+		device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_SSFLARE_BRIGHT], cmd);
+		device->BindResource(CS, &input, TEXSLOT_ONDEMAND0, cmd);
+		device->BindResource(CS, &depth, TEXSLOT_DEPTH, cmd);
+		ScreenLensFlare_Dispatch(res.texture_bright, cb, cmd);
+		device->EventEnd(cmd);
+	}
+
+	// blurred through its mips, so the ghosts are soft
+	{
+		device->EventBegin("Screen Lens Flare Blur", cmd);
+		MIPGEN_OPTIONS mipopt;
+		mipopt.gaussian_temp = &res.texture_temp;
+		mipopt.wide_gauss = true;
+		GenerateMipChain(res.texture_bright, wiRenderer::MIPGENFILTER_GAUSSIAN, cmd, mipopt);
+		device->EventEnd(cmd);
+	}
+
+	// the ghosts and the halo
+	{
+		device->EventBegin("Screen Lens Flare Ghosts", cmd);
+		const TextureDesc& desc = res.texture_flare.GetDesc();
+		PostProcessCB cb;
+		cb.xPPResolution.x = desc.Width;
+		cb.xPPResolution.y = desc.Height;
+		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
+		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
+		cb.xPPParams0.x = spacing;
+		cb.xPPParams0.y = haloRadius;
+		cb.xPPParams0.z = 0.004f; // the colour fringe
+		cb.xPPParams0.w = 5.0f; // ghosts
+		cb.xPPParams1.x = (float)std::min(2u, res.texture_bright.desc.MipLevels - 1); // the blur
+		device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_SSFLARE_GHOSTS], cmd);
+		device->BindResource(CS, &res.texture_bright, TEXSLOT_ONDEMAND0, cmd);
+		ScreenLensFlare_Dispatch(res.texture_flare, cb, cmd);
+		device->EventEnd(cmd);
+	}
+
+	// added to the image
+	{
+		device->EventBegin("Screen Lens Flare Combine", cmd);
+		const TextureDesc& desc = output.GetDesc();
+		PostProcessCB cb;
+		cb.xPPResolution.x = desc.Width;
+		cb.xPPResolution.y = desc.Height;
+		cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
+		cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
+		cb.xPPParams0.x = intensity;
+		device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_SSFLARE_COMBINE], cmd);
+		device->BindResource(CS, &input, TEXSLOT_ONDEMAND0, cmd);
+		device->BindResource(CS, &res.texture_flare, TEXSLOT_ONDEMAND1, cmd);
+		ScreenLensFlare_Dispatch(output, cb, cmd);
+		device->EventEnd(cmd);
+	}
+
+	device->EventEnd(cmd);
+}
+
 void CreateBloomResources(BloomResources& res, XMUINT2 resolution)
 {
 	TextureDesc desc;

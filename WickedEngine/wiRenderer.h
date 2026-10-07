@@ -582,6 +582,28 @@ namespace wiRenderer
 		float radius = 0, // GG: wider halos, 0 as before
 		float cap = 30 // GG: the brightest a sample counts for, 30 as before
 	);
+	// GG: a lens flare from the image's own bright spots (missiles, explosions, fire): ghosts mirrored through the
+	// centre and a halo ring, from a bright pass with its own threshold at a quarter of the resolution, the sky left
+	// out on request (the sun has its own flare); added before the tone map
+	struct ScreenLensFlareResources
+	{
+		wiGraphics::Texture texture_bright;
+		wiGraphics::Texture texture_temp;
+		wiGraphics::Texture texture_flare;
+	};
+	void CreateScreenLensFlareResources(ScreenLensFlareResources& res, XMUINT2 resolution);
+	void Postprocess_ScreenLensFlare(
+		const ScreenLensFlareResources& res,
+		const wiGraphics::Texture& input,
+		const wiGraphics::Texture& output,
+		const wiGraphics::Texture& depth,
+		wiGraphics::CommandList cmd,
+		float threshold,
+		float intensity,
+		float spacing,
+		float haloRadius,
+		bool noSky
+	);
 	struct VolumetricCloudResources
 	{
 		wiGraphics::Texture texture_cloudRender;

@@ -787,6 +787,7 @@ void RenderPath3D::ResizeBuffers()
 	wiRenderer::CreateVolumetricCloudResources(volumetriccloudResources_reflection[1], XMUINT2(depthBuffer_Reflection.desc.Width, depthBuffer_Reflection.desc.Height));
 
 	wiRenderer::CreateBloomResources(bloomResources, internalResolution);
+	wiRenderer::CreateScreenLensFlareResources(screenLensFlareResources, internalResolution); // GG
 
 #ifndef REMOVE_RAY_TRACED_SHADOW
 	if (device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_RAYTRACING_INLINE))
@@ -2399,6 +2400,29 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 				rt_read = rt_write2;
 			std::swap(rt_read, rt_write);
 			device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+		}
+
+		// GG: the screen-space lens flare from the image's bright spots, before the tone map
+		if (getScreenLensFlareEnabled())
+		{
+			wiRenderer::Postprocess_ScreenLensFlare(
+				screenLensFlareResources,
+				rt_first == nullptr ? *rt_read : *rt_first,
+				*rt_write,
+				depthBuffer_Copy,
+				cmd,
+				getScreenLensFlareThreshold(),
+				getScreenLensFlareIntensity(),
+				getScreenLensFlareSpacing(),
+				getScreenLensFlareHalo(),
+				getScreenLensFlareNoSky()
+			);
+			rt_first = nullptr;
+
+			if (rt_read == GetGbuffer_Read(GBUFFER_COLOR))
+				rt_read = rt_write2;
+			std::swap(rt_read, rt_write);
+			device->UnbindResources(TEXSLOT_ONDEMAND0, 2, cmd);
 		}
 	}
 
