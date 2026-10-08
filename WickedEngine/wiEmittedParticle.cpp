@@ -358,6 +358,7 @@ void wiEmittedParticle::Burst(int num)
 }
 void wiEmittedParticle::Restart()
 {
+	prev_emitter_frame = 0; // GG: no trail back to where it was before
 #ifdef GGREDUCED
 	// GG: the particles are cleared in the next UpdateGPU and the buffers kept. Making every buffer again cost each reuse
 	// of a pooled effect (Lua's WParticleEffectAction 4) its buffers
@@ -481,7 +482,17 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleFadeOutStart = wiMath::Clamp(wpe_filler_1, 0.0f, 0.99f);
 		cb.xParticleMirror = (uint32_t)wiMath::Clamp(wpe_filler_2, 0.0f, 3.0f);
 		cb.xParticleEmissiveMap = material.textures[MaterialComponent::EMISSIVEMAP].resource != nullptr ? 1 : 0;
-		cb.xParticlePadding = 0;
+		cb.xParticleLocalOptions = (uint32_t)wiMath::Clamp(wpe_filler_3, 0.0f, 3.0f);
+
+		// GG: the path since the last frame for a trail: none the first frame, after a skipped frame (a reused or hidden
+		// effect) or after a jump no craft makes in a frame (a teleport)
+		const XMFLOAT3 emitterPos = XMFLOAT3(transform.world._41, transform.world._42, transform.world._43);
+		const uint64_t frame = device->GetFrameCount();
+		const bool bPrevValid = prev_emitter_frame + 1 == frame && wiMath::Distance(prev_emitter_pos, emitterPos) < 4000.0f;
+		cb.xEmitterPrevPos = bPrevValid ? prev_emitter_pos : emitterPos;
+		cb.xEmitterPrevValid = bPrevValid ? 1.0f : 0.0f;
+		prev_emitter_pos = emitterPos;
+		prev_emitter_frame = frame;
 
 		cb.xEmitterOptions = 0;
 		if (IsSPHEnabled())

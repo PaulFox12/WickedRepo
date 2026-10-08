@@ -161,7 +161,7 @@ public:
 	float distance_sort_bias = 0;
 	float wpe_filler_1 = 0; // GG: the fade-out start, the share of a particle's life it stays fully opaque (0 fades over all of it)
 	float wpe_filler_2 = 0; // GG: the random mirroring a particle may take, bit 1 left-right, bit 2 upside down (0 none)
-	float wpe_filler_3 = 0;
+	float wpe_filler_3 = 0; // GG: options, bit 1 the velocity spreads turn with the emitter, bit 2 a trail along its path between frames
 
 	DWORD64 emittimer = 0;
 	inline void SetTimer(DWORD64 t) { emittimer = t; }
@@ -189,6 +189,9 @@ public:
 	float count_scale = 1.0f;
 	float speed_scale = 1.0f;
 	float spread_scale = 1.0f;
+	// GG: where the emitter was at its last update, and in which frame, for a trail (wpe_filler_3 bit 2)
+	mutable XMFLOAT3 prev_emitter_pos = XMFLOAT3(0, 0, 0);
+	mutable uint64_t prev_emitter_frame = 0;
 
 	bool bStatActive = false;
 	inline bool IsStatActive() const { return bStatActive; }

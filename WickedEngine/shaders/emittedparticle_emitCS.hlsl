@@ -104,20 +104,44 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         float particleStartingSize = xParticleSize + (xParticleSize * ((rand(seed, uv) - 0.5f) * xParticleSizeRandom));
 
+		// GG: a frame's particles start along the emitter's path since the last frame (xParticleLocalOptions bit 2), each older
+		// by its share of the frame, so a fast emitter leaves a trail, not beads
+		float trailAge = 0;
+		[branch]
+		if ((xParticleLocalOptions & 2) && xEmitterPrevValid > 0)
+		{
+			const float trailT = saturate(((float)DTid.x + rand(seed, uv)) / (float)emitCount);
+			const float3 emitterPos = mul(xEmitterWorld, float4(0, 0, 0, 1)).xyz;
+			pos += (xEmitterPrevPos - emitterPos) * (1 - trailT);
+			trailAge = (1 - trailT) * g_xFrame_DeltaTime;
+		}
+
 		// create new particle:
 		Particle particle;
 		particle.position = pos;
 		particle.force = 0;
 		particle.mass = xParticleMass;
-        particle.velocity = xParticleVelocity + (nor + (float3(rand(seed, uv), rand(seed, uv), rand(seed, uv)) - 0.5f) * xParticleNormalRandom) * xParticleNormalFactor;
+		// GG: the random spreads around the velocity, turned with the emitter on request (xParticleLocalOptions bit 1), so a
+		// jet's cone follows a turning craft; drawn in the same order as before
+		particle.velocity = xParticleVelocity + nor * xParticleNormalFactor;
+		float3 spread = (float3(rand(seed, uv), rand(seed, uv), rand(seed, uv)) - 0.5f) * xParticleNormalRandom * xParticleNormalFactor;
 //        particle.velocity += float3(sin(rand(seed, uv) * PI2) * xParticleNormalFactorX, (rand(seed, uv) - 0.5f) * xParticleNormalFactorY, (cos(rand(seed, uv) * PI2)) * xParticleNormalFactorZ);
-		particle.velocity += float3(sin((float) rand(seed, uv) * PI2) * xParticleNormalFactor2X, (rand(seed, uv) - 0.5f) * xParticleNormalFactor2Y, cos((float) rand(seed, uv) * PI2) * xParticleNormalFactor2Z);
-		particle.velocity += float3(sin((float) DTid.x) * xParticleNormalFactorX, (rand(seed, uv) - 0.5f) * xParticleNormalFactorY, cos((float) DTid.x) * xParticleNormalFactorZ);
+		spread += float3(sin((float) rand(seed, uv) * PI2) * xParticleNormalFactor2X, (rand(seed, uv) - 0.5f) * xParticleNormalFactor2Y, cos((float) rand(seed, uv) * PI2) * xParticleNormalFactor2Z);
+		spread += float3(sin((float) DTid.x) * xParticleNormalFactorX, (rand(seed, uv) - 0.5f) * xParticleNormalFactorY, cos((float) DTid.x) * xParticleNormalFactorZ);
+		[branch]
+		if (xParticleLocalOptions & 1)
+		{
+			const float spreadLength = length(spread);
+			if (spreadLength > 0) spread = normalize(mul((float3x3)xEmitterWorld, spread)) * spreadLength;
+		}
+		particle.velocity += spread;
         
         //particle.rotationalVelocity = xParticleRotation + (rand(seed, uv) - 0.5f) * xParticleRotationRandom;
         particle.rotationalVelocity = xParticleRotation + ((rand(seed, uv) - 0.5f) * xParticleRotationRandom);
 		particle.maxLife = xParticleLifeSpan + xParticleLifeSpan * (rand(seed, uv) - 0.5f) * xParticleLifeSpanRandomness;
 		particle.life = particle.maxLife;
+		particle.position += particle.velocity * trailAge;
+		particle.life = max(particle.life - trailAge, 0.001f);
         particle.sizeBeginEnd = float2(particleStartingSize, (particleStartingSize * xParticleScaling) + ((rand(seed, uv) - 0.5f) * xParticleScalingRandom));
 		// GG: random mirroring as the emitter allows (xParticleMirror); the flags were shifted to bits 31 and 30, outside their
 		// masks, so no particle was mirrored. Both draws stay, so the random numbers after them are as before
