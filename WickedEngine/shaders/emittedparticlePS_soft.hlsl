@@ -4,6 +4,7 @@
 #include "objectHF.hlsli"
 
 TEXTURE2D(texture_color, float4, TEXSLOT_ONDEMAND0);
+TEXTURE2D(texture_emissive, float4, TEXSLOT_ONDEMAND1);
 
 [earlydepthstencil]
 float4 main(VertextoPixel input) : SV_TARGET
@@ -31,7 +32,25 @@ float4 main(VertextoPixel input) : SV_TARGET
 
 	float opacity = saturate(color.a * inputColor.a * fade);
 
-	color.rgb *= inputColor.rgb * (1 + xParticleEmissive);
+	// GG: with an emissive map (on the same frames as the colour), only what it marks glows, by the emissive strength;
+	// without one the whole particle is brightened by it as before
+	float3 emissive = 0;
+	[branch]
+	if (xParticleEmissiveMap)
+	{
+		float3 emissiveColor = texture_emissive.Sample(sampler_linear_clamp, input.tex.xy).rgb;
+		[branch]
+		if (xEmitterOptions & EMITTER_OPTION_BIT_FRAME_BLENDING_ENABLED)
+		{
+			emissiveColor = lerp(emissiveColor, texture_emissive.Sample(sampler_linear_clamp, input.tex.zw).rgb, input.frameBlend);
+		}
+		color.rgb *= inputColor.rgb;
+		emissive = emissiveColor * inputColor.rgb * xParticleEmissive;
+	}
+	else
+	{
+		color.rgb *= inputColor.rgb * (1 + xParticleEmissive);
+	}
 	color.a = opacity;
 
 #ifdef EMITTEDPARTICLE_DISTORTION
@@ -77,6 +96,10 @@ float4 main(VertextoPixel input) : SV_TARGET
 	}
 
 #endif // EMITTEDPARTICLE_LIGHTING
+
+#ifndef EMITTEDPARTICLE_DISTORTION
+	color.rgb += emissive;
+#endif // EMITTEDPARTICLE_DISTORTION
 
 	return max(color, 0);
 }

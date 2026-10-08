@@ -23,7 +23,9 @@ VertextoPixel main(uint vertexID : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
 	// calculate render properties from life:
 	float lifeLerp = 1 - particle.life / particle.maxLife;
 	float size = lerp(particle.sizeBeginEnd.x, particle.sizeBeginEnd.y, lifeLerp);
-	float opacity = saturate(lerp(1, 0, lifeLerp) * xEmitterOpacity);
+	// GG: fully opaque for the first xParticleFadeOutStart of its life, then fading out (0 fades over all of it)
+	const float fadeLerp = saturate((lifeLerp - xParticleFadeOutStart) / (1 - xParticleFadeOutStart));
+	float opacity = saturate(lerp(1, 0, fadeLerp) * xEmitterOpacity);
 	float rotation = lifeLerp * particle.rotationalVelocity;
 
 	// expand the point into a billboard in view space:

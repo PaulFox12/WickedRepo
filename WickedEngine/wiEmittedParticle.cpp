@@ -263,8 +263,8 @@ void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 		if(randpause > spawn_random)
 			randpause = 0;
 
-		emit += (float)(count) * dt;
-		randemit = count;
+		emit += (float)(count) * count_scale * dt;
+		randemit = count * count_scale;
 		//randnum *= 0.1f;
 	}
 	else
@@ -354,7 +354,7 @@ void wiEmittedParticle::Burst(int num)
 	if (num <= 0)
 		num = burst_amount;
 	burst_delay_timer = burst_delay;
-	burst += num;
+	burst += (int)(num * count_scale + 0.5f);
 }
 void wiEmittedParticle::Restart()
 {
@@ -406,7 +406,8 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		device->EventBegin("UpdateEmittedParticles", cmd);
 
 		EmittedParticleCB cb;
-		cb.xEmitterWorld = transform.world;
+		// GG: the layer's spread widens the volume (or mesh) it emits from
+		XMStoreFloat4x4(&cb.xEmitterWorld, XMMatrixScaling(spread_scale, spread_scale, spread_scale) * XMLoadFloat4x4(&transform.world));
 		cb.xEmitCount = (uint32_t)emit;
 		
 		cb.xEmitterMeshIndexCount = mesh == nullptr ? 0 : (uint32_t)mesh->indices.size();
@@ -414,14 +415,14 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xEmitterRandomness = wiRandom::getRandom(0, 1000) * 0.001f;
 		cb.xParticleLifeSpan = life;
 		cb.xParticleLifeSpanRandomness = random_life;
-		cb.xParticleNormalFactor = normal_factor;
+		cb.xParticleNormalFactor = normal_factor * speed_scale;
 		cb.xParticleRandomFactor = random_factor;
 		cb.xParticleScaling = scaleX;
-		cb.xParticleSize = size * size_scale;
+		cb.xParticleSize = size * size_scale * layer_size_scale;
 		cb.xParticleMotionBlurAmount = motionBlurAmount;
 		cb.xParticleRotation = rotation * XM_PI * 60;
 		cb.xParticleColor = wiMath::CompressColor(XMFLOAT4(material.baseColor.x * color_tint.x, material.baseColor.y * color_tint.y, material.baseColor.z * color_tint.z, 1));
-		cb.xParticleEmissive = material.emissiveColor.w;
+		cb.xParticleEmissive = material.emissiveColor.w * emissive_scale;
 		cb.xEmitterOpacity = material.GetOpacity() * opacity_scale;
 		cb.xParticleMass = mass;
 		cb.xEmitterMaxParticleCount = MAX_PARTICLES;
@@ -430,16 +431,16 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 
 		cb.xEmitterRestitution = restitution;
 		cb.xEmitterFadeinTime = fadein_time;
-		XMStoreFloat3(&cb.xParticleSinPos, XMLoadFloat3(&startpos));
-		cb.xParticleNormalFactorX = burst_factor_x;
-		cb.xParticleNormalFactorY = burst_factor_y;
-		cb.xParticleNormalFactorZ = burst_factor_z;
+		XMStoreFloat3(&cb.xParticleSinPos, XMLoadFloat3(&startpos) * spread_scale);
+		cb.xParticleNormalFactorX = burst_factor_x * speed_scale;
+		cb.xParticleNormalFactorY = burst_factor_y * speed_scale;
+		cb.xParticleNormalFactorZ = burst_factor_z * speed_scale;
 
 		cb.xParticleBurstFactorDpeed = burst_factor_speed;
 
-		cb.xParticleNormalFactor2X = normal_factor_x;
-		cb.xParticleNormalFactor2Y = normal_factor_y;
-		cb.xParticleNormalFactor2Z = normal_factor_z;
+		cb.xParticleNormalFactor2X = normal_factor_x * speed_scale;
+		cb.xParticleNormalFactor2Y = normal_factor_y * speed_scale;
+		cb.xParticleNormalFactor2Z = normal_factor_z * speed_scale;
 
 		cb.xParticleNormalRandom = normal_random;
 		cb.xParticleRotationRandom = rotation_random;
@@ -454,7 +455,7 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		//cb.xParticleSpawnRandom;
 
 		cb.xParticleRandomPos = random_position;
-		cb.xParticleRandomPosScale = random_position_scale;
+		cb.xParticleRandomPosScale = random_position_scale * spread_scale;
 		cb.xTotalEmitCount = total_emit_count;
 
 		cb.xEmitterKillBoxCount = std::min(killbox_count, EMITTER_KILLBOX_COUNT);
@@ -472,10 +473,15 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xEmitterFrameRate = frameRate;
 		cb.xParticleGravity = gravity;
 		cb.xParticleDrag = drag;
-		XMStoreFloat3(&cb.xParticleVelocity, XMVector3TransformNormal(XMLoadFloat3(&velocity), XMLoadFloat4x4(&transform.world)));
+		XMStoreFloat3(&cb.xParticleVelocity, XMVector3TransformNormal(XMLoadFloat3(&velocity), XMLoadFloat4x4(&transform.world)) * speed_scale);
 
 		cb.xParticleRandomColorFactor = random_color;
 		cb.xEmitterLayerMask = layerMask;
+
+		cb.xParticleFadeOutStart = wiMath::Clamp(wpe_filler_1, 0.0f, 0.99f);
+		cb.xParticleMirror = (uint32_t)wiMath::Clamp(wpe_filler_2, 0.0f, 3.0f);
+		cb.xParticleEmissiveMap = material.textures[MaterialComponent::EMISSIVEMAP].resource != nullptr ? 1 : 0;
+		cb.xParticlePadding = 0;
 
 		cb.xEmitterOptions = 0;
 		if (IsSPHEnabled())
@@ -792,6 +798,11 @@ void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialCompon
 		else
 		{
 			device->BindResource(PS, material.textures[MaterialComponent::BASECOLORMAP].GetGPUResource(), TEXSLOT_ONDEMAND0, cmd);
+		}
+		// GG: its emissive map, sampled on the same frames (the constants say whether there is one)
+		if (material.textures[MaterialComponent::EMISSIVEMAP].resource != nullptr)
+		{
+			device->BindResource(PS, material.textures[MaterialComponent::EMISSIVEMAP].GetGPUResource(), TEXSLOT_ONDEMAND1, cmd);
 		}
 		device->BindShadingRate(material.shadingRate, cmd);
 	}

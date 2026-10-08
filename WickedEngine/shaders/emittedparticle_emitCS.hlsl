@@ -119,9 +119,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
 		particle.maxLife = xParticleLifeSpan + xParticleLifeSpan * (rand(seed, uv) - 0.5f) * xParticleLifeSpanRandomness;
 		particle.life = particle.maxLife;
         particle.sizeBeginEnd = float2(particleStartingSize, (particleStartingSize * xParticleScaling) + ((rand(seed, uv) - 0.5f) * xParticleScalingRandom));
+		// GG: random mirroring as the emitter allows (xParticleMirror); the flags were shifted to bits 31 and 30, outside their
+		// masks, so no particle was mirrored. Both draws stay, so the random numbers after them are as before
 		particle.color_mirror = 0;
-		particle.color_mirror |= ((rand(seed, uv) > 0.5f) << 31) & 0x10000000;
-		particle.color_mirror |= ((rand(seed, uv) < 0.5f) << 30) & 0x20000000;
+		const bool mirrorX = rand(seed, uv) > 0.5f;
+		const bool mirrorY = rand(seed, uv) < 0.5f;
+		if ((xParticleMirror & 1) && mirrorX) particle.color_mirror |= 0x10000000;
+		if ((xParticleMirror & 2) && mirrorY) particle.color_mirror |= 0x20000000;
 
 		uint color_modifier = 0;
 		color_modifier |= (uint)(255.0 * lerp(1, rand(seed, uv), xParticleRandomColorFactor)) << 0;

@@ -159,8 +159,8 @@ public:
 	float randemit = 0;
 	uint32_t randpause = 0;
 	float distance_sort_bias = 0;
-	float wpe_filler_1 = 0;
-	float wpe_filler_2 = 0;
+	float wpe_filler_1 = 0; // GG: the fade-out start, the share of a particle's life it stays fully opaque (0 fades over all of it)
+	float wpe_filler_2 = 0; // GG: the random mirroring a particle may take, bit 1 left-right, bit 2 upside down (0 none)
 	float wpe_filler_3 = 0;
 
 	DWORD64 emittimer = 0;
@@ -182,6 +182,13 @@ public:
 	float opacity_scale = 1.0f; // multiplies the material opacity
 	float size_scale = 1.0f; // multiplies the particle size
 	XMFLOAT3 color_tint = XMFLOAT3(1, 1, 1); // multiplies the material colour
+	// GG: one layer's own multipliers, set at runtime: its particle size (with size_scale), its emissive strength, how many it
+	// emits (rate and bursts), their speed, and the spread of where they start
+	float layer_size_scale = 1.0f;
+	float emissive_scale = 1.0f;
+	float count_scale = 1.0f;
+	float speed_scale = 1.0f;
+	float spread_scale = 1.0f;
 
 	bool bStatActive = false;
 	inline bool IsStatActive() const { return bStatActive; }

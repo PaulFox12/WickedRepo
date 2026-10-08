@@ -119,6 +119,14 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 	float4 xEmitterKillBoxMin[EMITTER_KILLBOX_COUNT];
 	float4 xEmitterKillBoxMax[EMITTER_KILLBOX_COUNT];
 
+	// GG: per emitter (appended): the share of its life a particle stays fully opaque before it fades (0 fades over its
+	// whole life), the random mirroring it allows (bit 1 left-right, bit 2 upside down, 0 none), and whether its material's emissive
+	// map is bound (TEXSLOT_ONDEMAND1)
+	float xParticleFadeOutStart;
+	uint xParticleMirror;
+	uint xParticleEmissiveMap;
+	float xParticlePadding;
+
 };
 
 static const uint THREADCOUNT_EMIT = 256;
