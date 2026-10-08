@@ -333,7 +333,7 @@ void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 
 	if (emit <= 0)
 	{
-		DWORD64 maxLifeMil = (DWORD64) ((life + life * (0.5f) * random_life) * 1000.0);
+		DWORD64 maxLifeMil = (DWORD64) ((life + life * (0.5f) * random_life) * life_scale * 1000.0);
 		if (GetElapsedMilliseconds() - GetTimer() > (maxLifeMil * 2))
 		{
 			SetActive(false);
@@ -414,7 +414,7 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xEmitterMeshIndexCount = mesh == nullptr ? 0 : (uint32_t)mesh->indices.size();
 		cb.xEmitterMeshVertexPositionStride = sizeof(MeshComponent::Vertex_POS);
 		cb.xEmitterRandomness = wiRandom::getRandom(0, 1000) * 0.001f;
-		cb.xParticleLifeSpan = life;
+		cb.xParticleLifeSpan = life * life_scale;
 		cb.xParticleLifeSpanRandomness = random_life;
 		cb.xParticleNormalFactor = normal_factor * speed_scale;
 		cb.xParticleRandomFactor = random_factor;

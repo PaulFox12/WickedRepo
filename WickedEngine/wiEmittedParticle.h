@@ -183,12 +183,13 @@ public:
 	float size_scale = 1.0f; // multiplies the particle size
 	XMFLOAT3 color_tint = XMFLOAT3(1, 1, 1); // multiplies the material colour
 	// GG: one layer's own multipliers, set at runtime: its particle size (with size_scale), its emissive strength, how many it
-	// emits (rate and bursts), their speed, and the spread of where they start
+	// emits (rate and bursts), their speed, the spread of where they start, and how long new ones live
 	float layer_size_scale = 1.0f;
 	float emissive_scale = 1.0f;
 	float count_scale = 1.0f;
 	float speed_scale = 1.0f;
 	float spread_scale = 1.0f;
+	float life_scale = 1.0f;
 	// GG: where the emitter was at its last update, and in which frame, for a trail (wpe_filler_3 bit 2)
 	mutable XMFLOAT3 prev_emitter_pos = XMFLOAT3(0, 0, 0);
 	mutable uint64_t prev_emitter_frame = 0;
