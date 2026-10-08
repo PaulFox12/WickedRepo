@@ -122,7 +122,8 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 	// GG: per emitter (appended): the share of its life a particle stays fully opaque before it fades (0 fades over its
 	// whole life), the random mirroring it allows (bit 1 left-right, bit 2 upside down, 0 none), and whether its material's emissive
 	// map is bound (TEXSLOT_ONDEMAND1); its options (bit 1 the velocity spreads turn with the emitter, bit 2 a frame's
-	// particles start along the emitter's path since the last frame), and that path's start (valid 1, else 0)
+	// particles start along the emitter's path since the last frame, bit 3 no fog; for the fog, 8 additive and 16
+	// premultiplied blending), and that path's start (valid 1, else 0)
 	float xParticleFadeOutStart;
 	uint xParticleMirror;
 	uint xParticleEmissiveMap;

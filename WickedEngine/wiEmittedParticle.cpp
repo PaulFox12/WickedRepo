@@ -482,7 +482,10 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleFadeOutStart = wiMath::Clamp(wpe_filler_1, 0.0f, 0.99f);
 		cb.xParticleMirror = (uint32_t)wiMath::Clamp(wpe_filler_2, 0.0f, 3.0f);
 		cb.xParticleEmissiveMap = material.textures[MaterialComponent::EMISSIVEMAP].resource != nullptr ? 1 : 0;
-		cb.xParticleLocalOptions = (uint32_t)wiMath::Clamp(wpe_filler_3, 0.0f, 3.0f);
+		cb.xParticleLocalOptions = (uint32_t)wiMath::Clamp(wpe_filler_3, 0.0f, 7.0f);
+		// GG: how it blends, for the fog
+		if (material.GetBlendMode() == BLENDMODE_ADDITIVE) cb.xParticleLocalOptions |= 8;
+		else if (material.GetBlendMode() == BLENDMODE_PREMULTIPLIED) cb.xParticleLocalOptions |= 16;
 
 		// GG: the path since the last frame for a trail: none the first frame, after a skipped frame (a reused or hidden
 		// effect) or after a jump no craft makes in a frame (a teleport)

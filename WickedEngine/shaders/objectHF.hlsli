@@ -1254,6 +1254,54 @@ inline void ApplyFog(in float distance, float3 P, float3 V, inout float4 color)
 	*/
 }
 
+// GG: ApplyFog's fog as its colour and the share of the pixel it covers (0 none), for particles, which blend it their own
+// way; the colour is only worked out where there is fog. Without the realistic sky ApplyFog turns toward the pixel's own
+// colour and then the fog colour by its opacity, which is the fog colour by the opacity's share of the amount.
+inline float GetFogColorAndAmount(in float distance, float3 P, float3 V, out float3 fogColor)
+{
+	float fogMin = g_xFrame_Fog.x;
+	float fogMax = g_xFrame_Fog.y;
+	float fogMinAmount = 1;
+	fogColor = g_xFrame_WaterColor.rgb;
+
+	const bool underwater = (g_xFrame_Options & OPTION_BIT_WATER_ENABLED) && P.y < g_xFrame_WaterHeight && g_xCamera_CamPos.y < g_xFrame_WaterHeight;
+	if (underwater)
+	{
+		fogMin = g_xFrame_WaterFogMin;
+		fogMax = g_xFrame_WaterFogMax;
+		fogMinAmount = saturate(1 - g_xFrame_WaterFogMinAmount);
+		distance += max(0, g_xFrame_WaterHeight - P.y);
+	}
+
+	distance = max(0.0, distance - fogMin);
+	const float fogAmount = 1 - min(fogMinAmount, exp(distance * 4.0 / (fogMin - fogMax)));
+
+	[branch]
+	if (fogAmount <= 0)
+	{
+		return 0;
+	}
+	if (underwater)
+	{
+		float fogFade = V.y * 0.5 + 0.5;
+		fogColor *= 1.0 - (fogFade * fogFade);
+		return fogAmount;
+	}
+
+	const float PassedInFogOpacity = clamp(GetFogOpacity(), 0.0, 1.0);
+	if (g_xFrame_Options & OPTION_BIT_REALISTIC_SKY)
+	{
+		float3 horizonDir = -V;
+		float invLen = rsqrt(horizonDir.x*horizonDir.x + horizonDir.z*horizonDir.z);
+		invLen *= 0.995;
+		fogColor = GetDynamicSkyColor(float3(horizonDir.x * invLen, 0.1, horizonDir.z * invLen), false, false, false, true);
+		fogColor = lerp(fogColor, GetFogColor(), PassedInFogOpacity);
+		return fogAmount;
+	}
+	fogColor = GetFogColor();
+	return fogAmount * PassedInFogOpacity;
+}
+
 // OBJECT SHADER PROTOTYPE
 ///////////////////////////
 

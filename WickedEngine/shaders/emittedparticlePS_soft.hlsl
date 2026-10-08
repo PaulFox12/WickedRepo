@@ -101,5 +101,29 @@ float4 main(VertextoPixel input) : SV_TARGET
 	color.rgb += emissive;
 #endif // EMITTEDPARTICLE_DISTORTION
 
+	// GG: the scene's fog, as objects have it, unless the emitter skips it (xParticleLocalOptions bit 3): an additive particle
+	// dims instead of adding the fog's colour, a premultiplied one takes it by its opacity, and a distortion bends less
+	[branch]
+	if ((xParticleLocalOptions & 4) == 0)
+	{
+		float3 V = g_xCamera_CamPos - input.P;
+		const float dist = length(V);
+		V /= max(dist, 0.0001);
+		float3 fogColor;
+		const float fogAmount = GetFogColorAndAmount(dist, g_xCamera_CamPos, V, fogColor);
+#ifdef EMITTEDPARTICLE_DISTORTION
+		color.rgb *= 1 - fogAmount;
+#else
+		if (xParticleLocalOptions & 8)
+		{
+			color.rgb *= 1 - fogAmount;
+		}
+		else
+		{
+			color.rgb = lerp(color.rgb, (xParticleLocalOptions & 16) ? fogColor * color.a : fogColor, fogAmount);
+		}
+#endif // EMITTEDPARTICLE_DISTORTION
+	}
+
 	return max(color, 0);
 }
