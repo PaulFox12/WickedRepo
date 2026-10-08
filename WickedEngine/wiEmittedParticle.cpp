@@ -494,6 +494,8 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		const bool bPrevValid = prev_emitter_frame + 1 == frame && wiMath::Distance(prev_emitter_pos, emitterPos) < 4000.0f;
 		cb.xEmitterPrevPos = bPrevValid ? prev_emitter_pos : emitterPos;
 		cb.xEmitterPrevValid = bPrevValid ? 1.0f : 0.0f;
+		cb.xParticleWind = layer_wind;
+		cb.xParticleWindPadding = 0;
 		prev_emitter_pos = emitterPos;
 		prev_emitter_frame = frame;
 

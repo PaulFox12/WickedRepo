@@ -106,7 +106,8 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
 			particle.force = 0;
 
 			// drag: 
-			particle.velocity *= xParticleDrag;
+			// GG: relative to the air, so the particles slow toward the wind's velocity (none by default, as before)
+			particle.velocity = xParticleWind + (particle.velocity - xParticleWind) * xParticleDrag;
 
 			[branch]
 			if (xEmitterOptions & EMITTER_OPTION_BIT_SPH_ENABLED)

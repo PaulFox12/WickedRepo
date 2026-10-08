@@ -190,6 +190,9 @@ public:
 	float speed_scale = 1.0f;
 	float spread_scale = 1.0f;
 	float life_scale = 1.0f;
+	// GG: the air's velocity for this layer (world, units a second), set at runtime: its drag slows the particles toward
+	// it instead of to a stop, so they drift at the wind's speed, and a layer without drag isn't moved by it
+	XMFLOAT3 layer_wind = XMFLOAT3(0, 0, 0);
 	// GG: where the emitter was at its last update, and in which frame, for a trail (wpe_filler_3 bit 2)
 	mutable XMFLOAT3 prev_emitter_pos = XMFLOAT3(0, 0, 0);
 	mutable uint64_t prev_emitter_frame = 0;

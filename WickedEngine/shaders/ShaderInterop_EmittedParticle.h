@@ -132,6 +132,10 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 	float3 xEmitterPrevPos;
 	float xEmitterPrevValid;
 
+	// GG: the air's velocity for this emitter (world), which its drag slows the particles toward instead of to a stop
+	float3 xParticleWind;
+	float xParticleWindPadding;
+
 };
 
 static const uint THREADCOUNT_EMIT = 256;
