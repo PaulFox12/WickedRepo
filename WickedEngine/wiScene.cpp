@@ -3803,10 +3803,12 @@ OPTICK_EVENT();
 				object.transform_index = (int)transforms.GetIndex(entity);
 				object.prev_transform_index = (int)prev_transforms.GetIndex(entity);
 
-				const TransformComponent& transform = transforms[object.transform_index];
-
-				if (object.mesh_index >= 0)
+				// GG: GetIndex gives ~0 for a mesh or transform that no longer exists, which the unsigned test (>= 0) let
+				// through to meshes[0xFFFFFFFF]; such an object is left without bounds, so nothing draws it
+				if (object.mesh_index < (uint32_t)meshes.GetCount() && object.transform_index >= 0)
 				{
+					const TransformComponent& transform = transforms[object.transform_index];
+
 					//const MeshComponent& mesh = meshes[object.mesh_index];
 
 					MeshComponent* mesh = &meshes[object.mesh_index]; //PE: NEWLOD
