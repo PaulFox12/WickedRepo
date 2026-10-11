@@ -92,6 +92,11 @@ namespace GGTerrain {
 #define MTHREAD_HIERARCHY
 #endif
 
+#ifdef GGREDUCED
+bool g_bWickedKeepMeshesInUse = false;
+void (*g_pfnWickedMeshInUseRemove)(wiECS::Entity mesh, wiECS::Entity object) = nullptr;
+#endif
+
 using namespace wiECS;
 using namespace wiGraphics;
 
@@ -2034,6 +2039,20 @@ namespace wiScene
 
 	void Scene::Entity_Remove(Entity entity)
 	{
+#ifdef GGREDUCED
+		// GG: a mesh an object of the drawn scene still uses is kept, and the hook told who asked (g_bWickedKeepMeshesInUse)
+		if (g_bWickedKeepMeshesInUse && meshes.Contains(entity) && this == &GetScene())
+		{
+			for (size_t i = 0; i < objects.GetCount(); ++i)
+			{
+				if (objects[i].meshID == entity && objects.GetEntity(i) != entity)
+				{
+					if (g_pfnWickedMeshInUseRemove) g_pfnWickedMeshInUseRemove(entity, objects.GetEntity(i));
+					return;
+				}
+			}
+		}
+#endif
 		Component_Detach(entity); // special case, this will also remove entity from hierarchy but also do more!
 
 		names.Remove(entity);

@@ -24,6 +24,14 @@
 
 class wiArchive;
 
+#ifdef GGREDUCED
+// GG: while set (a game running), Scene::Entity_Remove keeps a mesh that an object of the drawn scene still uses and tells
+// g_pfnWickedMeshInUseRemove the mesh and that object. Removed entities' ids are handed out again, so a remove of an id its
+// caller no longer owns would take another object's mesh away (meshes[0xFFFFFFFF] in RunObjectUpdateSystem)
+extern bool g_bWickedKeepMeshesInUse;
+extern void (*g_pfnWickedMeshInUseRemove)(wiECS::Entity mesh, wiECS::Entity object);
+#endif
+
 namespace wiScene
 {
 	struct NameComponent
