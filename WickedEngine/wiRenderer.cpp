@@ -1119,6 +1119,12 @@ enum DEBUGRENDERING
 };
 PipelineState PSO_debug[DEBUGRENDERING_COUNT];
 
+// GG: the half resolution particles' composite (DrawParticleHalfComposite), loaded with the other shaders (one loaded
+// later is looked for from the current folder, which the game moves)
+Shader particleCompositePS;
+BlendState particleCompositeBlend;
+PipelineState PSO_particlecomposite;
+
 
 #if __has_include("wiShaderDump.h")
 // In this case, wiShaderDump.h contains precompiled shader binary data
@@ -1592,9 +1598,35 @@ void LoadShaders()
 #ifdef GGREDUCED
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_RAIN], "rainCS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_SNOW], "snowCS.cso"); });
+	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(PS, particleCompositePS, "particlecompositePS.cso"); });
 #endif
 
 	wiJobSystem::Wait(ctx);
+
+#ifdef GGREDUCED
+	// the half resolution particles over the scene: scene * their alpha + their colour
+	if (particleCompositePS.IsValid())
+	{
+		BlendState bd;
+		bd.RenderTarget[0].BlendEnable = true;
+		bd.RenderTarget[0].SrcBlend = BLEND_ONE;
+		bd.RenderTarget[0].DestBlend = BLEND_SRC_ALPHA;
+		bd.RenderTarget[0].BlendOp = BLEND_OP_ADD;
+		bd.RenderTarget[0].SrcBlendAlpha = BLEND_ZERO;
+		bd.RenderTarget[0].DestBlendAlpha = BLEND_ONE;
+		bd.RenderTarget[0].BlendOpAlpha = BLEND_OP_ADD;
+		bd.RenderTarget[0].RenderTargetWriteMask = COLOR_WRITE_ENABLE_ALL;
+		bd.IndependentBlendEnable = false;
+		particleCompositeBlend = bd;
+		PipelineStateDesc desc;
+		desc.vs = &shaders[VSTYPE_SCREEN];
+		desc.ps = &particleCompositePS;
+		desc.bs = &particleCompositeBlend;
+		desc.rs = &rasterizers[RSTYPE_DOUBLESIDED];
+		desc.dss = &depthStencils[DSSTYPE_XRAY];
+		device->CreatePipelineState(&desc, &PSO_particlecomposite);
+	}
+#endif
 
 	// default objectshaders:
 	wiJobSystem::Dispatch(ctx, MaterialComponent::SHADERTYPE_COUNT, 1, [](wiJobArgs args) {
@@ -6371,7 +6403,7 @@ static bool IsHalfResolutionEmitter(const wiEmittedParticle& emitter)
 // whether a visible emitter is drawn at half resolution this frame (after DrawSoftParticles_Init)
 bool HasHalfResolutionParticles(const Visibility& vis)
 {
-	if (!particleHalfResolution || IsWireRender()) return false;
+	if (!particleHalfResolution || IsWireRender() || !particleCompositePS.IsValid()) return false;
 	for (size_t i = 0; i < emitterCount; ++i)
 	{
 		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];
@@ -6405,35 +6437,9 @@ void DrawSoftParticles_Half(const Visibility& vis, CommandList cmd)
 // depth (particlecompositePS)
 void DrawParticleHalfComposite(const Texture& particleHalf, const Texture& lineardepth, CommandList cmd)
 {
-	static Shader compositePS;
-	static BlendState compositeBlend;
-	static PipelineState compositePSO;
-	static bool bMade = false;
-	if (!bMade)
-	{
-		LoadShader(PS, compositePS, "particlecompositePS.cso");
-		BlendState bd;
-		bd.RenderTarget[0].BlendEnable = true;
-		bd.RenderTarget[0].SrcBlend = BLEND_ONE;
-		bd.RenderTarget[0].DestBlend = BLEND_SRC_ALPHA;
-		bd.RenderTarget[0].BlendOp = BLEND_OP_ADD;
-		bd.RenderTarget[0].SrcBlendAlpha = BLEND_ZERO;
-		bd.RenderTarget[0].DestBlendAlpha = BLEND_ONE;
-		bd.RenderTarget[0].BlendOpAlpha = BLEND_OP_ADD;
-		bd.RenderTarget[0].RenderTargetWriteMask = COLOR_WRITE_ENABLE_ALL;
-		bd.IndependentBlendEnable = false;
-		compositeBlend = bd;
-		PipelineStateDesc desc;
-		desc.vs = &shaders[VSTYPE_SCREEN];
-		desc.ps = &compositePS;
-		desc.bs = &compositeBlend;
-		desc.rs = &rasterizers[RSTYPE_DOUBLESIDED];
-		desc.dss = &depthStencils[DSSTYPE_XRAY];
-		device->CreatePipelineState(&desc, &compositePSO);
-		bMade = true;
-	}
+	if (!particleCompositePS.IsValid()) return;
 	device->EventBegin("Particles - Half Resolution Composite", cmd);
-	device->BindPipelineState(&compositePSO, cmd);
+	device->BindPipelineState(&PSO_particlecomposite, cmd);
 	BindConstantBuffers(PS, cmd);
 	device->BindResource(PS, &particleHalf, TEXSLOT_ONDEMAND0, cmd);
 	device->BindResource(PS, &lineardepth, TEXSLOT_LINEARDEPTH, cmd);
