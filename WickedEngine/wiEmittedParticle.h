@@ -60,7 +60,9 @@ public:
 
 	// Must have a transform and material component, but mesh is optional
 	void UpdateGPU(const TransformComponent& transform, const MaterialComponent& material, const MeshComponent* mesh, wiGraphics::CommandList cmd) const;
-	void Draw(const CameraComponent& camera, const MaterialComponent& material, wiGraphics::CommandList cmd) const;
+	void Draw(const CameraComponent& camera, const MaterialComponent& material, wiGraphics::CommandList cmd, bool bHalfResolution = false) const;
+	// GG: drawn at half resolution with the others marked so (wpe_filler_3 bit 8), when the renderer has them on
+	bool IsHalfResolution() const { return ((int)wpe_filler_3 & 8) != 0; }
 
 	ParticleCounters GetStatistics() { return statistics; }
 
@@ -161,7 +163,7 @@ public:
 	float distance_sort_bias = 0;
 	float wpe_filler_1 = 0; // GG: the fade-out start, the share of a particle's life it stays fully opaque (0 fades over all of it)
 	float wpe_filler_2 = 0; // GG: the random mirroring a particle may take, bit 1 left-right, bit 2 upside down (0 none)
-	float wpe_filler_3 = 0; // GG: options, bit 1 the velocity spreads turn with the emitter, bit 2 a trail along its path between frames, bit 3 no fog
+	float wpe_filler_3 = 0; // GG: options, bit 1 the velocity spreads turn with the emitter, bit 2 a trail along its path between frames, bit 3 no fog, bit 4 (8) drawn at half resolution
 
 	DWORD64 emittimer = 0;
 	inline void SetTimer(DWORD64 t) { emittimer = t; }

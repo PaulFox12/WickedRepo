@@ -113,6 +113,7 @@ public:
 	wiGraphics::Texture rtWaterRipple; // water ripple sprite normal maps are rendered into this
 	wiGraphics::Texture rtParticleDistortion; // contains distortive particles
 	wiGraphics::Texture rtParticleDistortion_Resolved; // contains distortive particles
+	wiGraphics::Texture rtParticleHalf; // GG: the particles drawn at half resolution (colour premultiplied, alpha the scene showing through)
 	wiGraphics::Texture rtVolumetricLights[2]; // contains the volumetric light results
 	wiGraphics::Texture rtTemporalAA[2]; // temporal AA history buffer
 	wiGraphics::Texture rtBloom; // contains the bright parts of the image + mipchain
@@ -147,6 +148,8 @@ public:
 	wiGraphics::RenderPass renderpass_lightshafts;
 	wiGraphics::RenderPass renderpass_volumetriclight;
 	wiGraphics::RenderPass renderpass_particledistortion;
+	wiGraphics::RenderPass renderpass_particlehalf; // GG: into rtParticleHalf, cleared
+	wiGraphics::RenderPass renderpass_particlecomposite; // GG: rtParticleHalf laid over the scene's colour
 	wiGraphics::RenderPass renderpass_waterripples;
 
 	wiGraphics::Texture debugUAV; // debug UAV can be used by some shaders...

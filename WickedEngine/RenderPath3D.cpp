@@ -348,6 +348,22 @@ void RenderPath3D::ResizeBuffers()
 			device->SetName(&rtParticleDistortion_Resolved, "rtParticleDistortion_Resolved");
 		}
 	}
+#ifdef GGREDUCED
+	{
+		// GG: the half resolution particles, cleared to no colour with the whole scene showing through
+		TextureDesc desc;
+		desc.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
+		desc.Format = FORMAT_R16G16B16A16_FLOAT;
+		desc.Width = (internalResolution.x + 1) / 2;
+		desc.Height = (internalResolution.y + 1) / 2;
+		desc.clear.color[0] = 0;
+		desc.clear.color[1] = 0;
+		desc.clear.color[2] = 0;
+		desc.clear.color[3] = 1;
+		device->CreateTexture(&desc, nullptr, &rtParticleHalf);
+		device->SetName(&rtParticleHalf, "rtParticleHalf");
+	}
+#endif
 #endif
 
 //PE: MOVED
@@ -753,6 +769,22 @@ void RenderPath3D::ResizeBuffers()
 		}
 
 		device->CreateRenderPass(&desc, &renderpass_particledistortion);
+	}
+#endif
+#ifdef GGREDUCED
+	{
+		RenderPassDesc desc;
+		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtParticleHalf, RenderPassAttachment::LOADOP_CLEAR));
+		device->CreateRenderPass(&desc, &renderpass_particlehalf);
+	}
+	{
+		RenderPassDesc desc;
+		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtGbuffer[GBUFFER_COLOR], RenderPassAttachment::LOADOP_LOAD));
+		if (getMSAASampleCount() > 1)
+		{
+			desc.attachments.push_back(RenderPassAttachment::Resolve(&rtGbuffer_resolved[GBUFFER_COLOR]));
+		}
+		device->CreateRenderPass(&desc, &renderpass_particlecomposite);
 	}
 #endif
 
@@ -2303,6 +2335,34 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 	#endif
 
 	device->RenderPassEnd(cmd);
+
+#if defined(GGREDUCED) && !defined(REMOVE_WICKED_PARTICLE)
+	// GG: the emitters marked for half resolution, drawn together into a quarter of the pixels and laid over the scene by
+	// depth (wiRenderer::SetParticleHalfResolutionEnabled)
+	if (wiRenderer::HasHalfResolutionParticles(visibility_main))
+	{
+		auto range = wiProfiler::BeginRangeGPU("WParticles - Render (Half Resolution)", cmd);
+		bindresourcesLock.lock();
+
+		device->RenderPassBegin(&renderpass_particlehalf, cmd);
+		Viewport vp;
+		vp.Width = (float)rtParticleHalf.GetDesc().Width;
+		vp.Height = (float)rtParticleHalf.GetDesc().Height;
+		device->BindViewports(1, &vp, cmd);
+		wiRenderer::DrawSoftParticles_Half(visibility_main, cmd);
+		device->RenderPassEnd(cmd);
+
+		device->RenderPassBegin(&renderpass_particlecomposite, cmd);
+		vp.Width = (float)depthBuffer_Main.GetDesc().Width;
+		vp.Height = (float)depthBuffer_Main.GetDesc().Height;
+		device->BindViewports(1, &vp, cmd);
+		wiRenderer::DrawParticleHalfComposite(rtParticleHalf, rtLinearDepth, cmd);
+		device->RenderPassEnd(cmd);
+
+		bindresourcesLock.unlock();
+		wiProfiler::EndRange(range);
+	}
+#endif
 
 #ifndef REMOVE_WICKED_PARTICLE
 	// Distortion particles:

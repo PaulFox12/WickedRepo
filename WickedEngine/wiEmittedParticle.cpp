@@ -45,6 +45,11 @@ static RasterizerState		rasterizerState;
 static RasterizerState		wireFrameRS;
 static DepthStencilState	depthStencilState;
 static PipelineState		PSO[BLENDMODE_COUNT][wiEmittedParticle::PARTICLESHADERTYPE_COUNT];
+// GG: into the half resolution target (wiRenderer::DrawSoftParticles_Half), no depth test (its depth fade hides it behind
+// the scene), each blend keeping the colour premultiplied and in alpha how much of the scene shows through
+static PipelineState		PSO_half[BLENDMODE_COUNT][wiEmittedParticle::PARTICLESHADERTYPE_COUNT];
+static BlendState			halfBlendStates[BLENDMODE_COUNT];
+static DepthStencilState	depthStencilStateNone;
 static PipelineState		PSO_wire;
 
 static bool ALLOW_MESH_SHADER = false;
@@ -487,6 +492,8 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		// GG: how it blends, for the fog
 		if (material.GetBlendMode() == BLENDMODE_ADDITIVE) cb.xParticleLocalOptions |= 8;
 		else if (material.GetBlendMode() == BLENDMODE_PREMULTIPLIED) cb.xParticleLocalOptions |= 16;
+		// and drawn at half resolution (its screen position reads the scene's depth at twice it)
+		if (wiRenderer::GetParticleHalfResolutionEnabled() && IsHalfResolution()) cb.xParticleLocalOptions |= 32;
 
 		// GG: the path since the last frame for a trail: none the first frame, after a skipped frame (a reused or hidden
 		// effect) or after a jump no craft makes in a frame (a teleport)
@@ -789,7 +796,7 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 }
 
 
-void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialComponent& material, CommandList cmd) const
+void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialComponent& material, CommandList cmd, bool bHalfResolution) const
 {
 #ifdef GGREDUCED
 	if (!particleBuffer.IsValid())
@@ -807,7 +814,7 @@ void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialCompon
 	else
 	{
 		const BLENDMODE blendMode = material.GetBlendMode();
-		device->BindPipelineState(&PSO[blendMode][shaderType], cmd);
+		device->BindPipelineState(bHalfResolution ? &PSO_half[blendMode][shaderType] : &PSO[blendMode][shaderType], cmd);
 		if (material.textures[MaterialComponent::BASECOLORMAP].resource == nullptr)
 		{
 			device->BindResource(PS, wiTextureHelper::getWhite(), TEXSLOT_ONDEMAND0, cmd);
@@ -916,6 +923,12 @@ namespace wiEmittedParticle_Internal
 				if (desc.vs != nullptr) desc.vs = j == wiEmittedParticle::SOFT_LIGHTING ? &vertexShaderLighting : &vertexShader;
 #endif
 				device->CreatePipelineState(&desc, &PSO[i][j]);
+#ifdef GGREDUCED
+				PipelineStateDesc half = desc;
+				half.bs = &halfBlendStates[i];
+				half.dss = &depthStencilStateNone;
+				device->CreatePipelineState(&half, &PSO_half[i][j]);
+#endif
 			}
 		}
 
@@ -1013,6 +1026,31 @@ void wiEmittedParticle::Initialize()
 
 	bd.RenderTarget[0].BlendEnable = false;
 	blendStates[BLENDMODE_OPAQUE] = bd;
+
+	// GG: into the half resolution target, cleared to no colour and the whole scene showing through: over, its alpha
+	// taking from what shows through; premultiplied likewise; additive adding colour and leaving it
+	BlendState half;
+	half.RenderTarget[0].BlendEnable = true;
+	half.RenderTarget[0].SrcBlend = BLEND_SRC_ALPHA;
+	half.RenderTarget[0].DestBlend = BLEND_INV_SRC_ALPHA;
+	half.RenderTarget[0].BlendOp = BLEND_OP_ADD;
+	half.RenderTarget[0].SrcBlendAlpha = BLEND_ZERO;
+	half.RenderTarget[0].DestBlendAlpha = BLEND_INV_SRC_ALPHA;
+	half.RenderTarget[0].BlendOpAlpha = BLEND_OP_ADD;
+	half.RenderTarget[0].RenderTargetWriteMask = COLOR_WRITE_ENABLE_ALL;
+	half.IndependentBlendEnable = false;
+	for (int i = 0; i < BLENDMODE_COUNT; ++i) halfBlendStates[i] = half;
+	half.RenderTarget[0].SrcBlend = BLEND_ONE;
+	halfBlendStates[BLENDMODE_PREMULTIPLIED] = half;
+	half.RenderTarget[0].SrcBlend = BLEND_SRC_ALPHA;
+	half.RenderTarget[0].DestBlend = BLEND_ONE;
+	half.RenderTarget[0].DestBlendAlpha = BLEND_ONE;
+	halfBlendStates[BLENDMODE_ADDITIVE] = half;
+
+	DepthStencilState none;
+	none.DepthEnable = false;
+	none.StencilEnable = false;
+	depthStencilStateNone = none;
 
 	static wiEvent::Handle handle = wiEvent::Subscribe(SYSTEM_EVENT_RELOAD_SHADERS, [](uint64_t userdata) { wiEmittedParticle_Internal::LoadShaders(); });
 	wiEmittedParticle_Internal::LoadShaders();

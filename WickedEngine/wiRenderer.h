@@ -257,6 +257,12 @@ namespace wiRenderer
 		wiGraphics::CommandList cmd,
 		float distance
 	);
+	// GG: the emitters marked for half resolution, drawn together into a quarter of the pixels and laid over the scene
+	void SetParticleHalfResolutionEnabled(bool value);
+	bool GetParticleHalfResolutionEnabled();
+	bool HasHalfResolutionParticles(const Visibility& vis);
+	void DrawSoftParticles_Half(const Visibility& vis, wiGraphics::CommandList cmd);
+	void DrawParticleHalfComposite(const wiGraphics::Texture& particleHalf, const wiGraphics::Texture& lineardepth, wiGraphics::CommandList cmd);
 
 	// Draw simple light visualizer geometries
 	void DrawLightVisualizers(

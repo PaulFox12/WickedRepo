@@ -6201,6 +6201,7 @@ uint8_t cmdStart = 0;
 uint32_t currentemitter = 0;
 wiProfiler::range_id range_particle = 0;
 Texture linearparticledepth;
+bool particleHalfResolution = true; // GG: emitters marked for it drawn at half resolution (SetParticleHalfResolutionEnabled)
 
 void DrawSoftParticles_Done(
 	const Visibility& vis,
@@ -6331,12 +6332,99 @@ void DrawSoftParticles_Distance(
 		else if (!distortion && (emitter.shaderType == wiEmittedParticle::SOFT || emitter.shaderType == wiEmittedParticle::SOFT_LIGHTING || emitter.shaderType == wiEmittedParticle::SIMPLE || IsWireRender()))
 		{
 			emitterUsed[i] = true;
+			// GG: one marked for half resolution is drawn after the transparent pass with the others (DrawSoftParticles_Half)
+			if (particleHalfResolution && emitter.IsHalfResolution() && !IsWireRender()) continue;
 			emitter.Draw(*vis.camera, material, cmd);
 		}
 
 	}
 	particleLock.unlock();
 
+}
+
+// GG: the emitters marked for half resolution (wpe_filler_3 bit 8): with it on (SetParticleHalfResolutionEnabled), drawn
+// back to front together into a target a quarter the pixels after the transparent pass, then laid over the scene by depth
+// (DrawParticleHalfComposite); the overdraw of big soft smoke costs a quarter. They draw over the transparent meshes and the
+// full resolution particles, as one layer
+void SetParticleHalfResolutionEnabled(bool value) { particleHalfResolution = value; }
+bool GetParticleHalfResolutionEnabled() { return particleHalfResolution; }
+
+static bool IsHalfResolutionEmitter(const wiEmittedParticle& emitter)
+{
+	return particleHalfResolution && emitter.IsHalfResolution() && (emitter.shaderType == wiEmittedParticle::SOFT || emitter.shaderType == wiEmittedParticle::SOFT_LIGHTING || emitter.shaderType == wiEmittedParticle::SIMPLE);
+}
+
+// whether a visible emitter is drawn at half resolution this frame (after DrawSoftParticles_Init)
+bool HasHalfResolutionParticles(const Visibility& vis)
+{
+	if (!particleHalfResolution || IsWireRender()) return false;
+	for (size_t i = 0; i < emitterCount; ++i)
+	{
+		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];
+		if (IsHalfResolutionEmitter(vis.scene->emitters[emitterIndex])) return true;
+	}
+	return false;
+}
+
+// those emitters, back to front, into the bound half resolution target
+void DrawSoftParticles_Half(const Visibility& vis, CommandList cmd)
+{
+	particleLock.lock();
+	BindConstantBuffers(VS, cmd);
+	BindConstantBuffers(PS, cmd);
+	device->BindResource(PS, &linearparticledepth, TEXSLOT_LINEARDEPTH, cmd);
+	BindShadowmaps(VS, cmd);
+	device->BindResource(VS, &vis.scene->envmapArray, TEXSLOT_ENVMAPARRAY, cmd);
+	for (size_t i = 0; i < emitterCount; ++i)
+	{
+		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];
+		const wiEmittedParticle& emitter = vis.scene->emitters[emitterIndex];
+		if (!IsHalfResolutionEmitter(emitter)) continue;
+		const Entity entity = vis.scene->emitters.GetEntity(emitterIndex);
+		const MaterialComponent& material = *vis.scene->materials.GetComponent(entity);
+		emitter.Draw(*vis.camera, material, cmd, true);
+	}
+	particleLock.unlock();
+}
+
+// the half resolution target over the bound scene target: scene * its alpha + its colour, each pixel from the texels at its
+// depth (particlecompositePS)
+void DrawParticleHalfComposite(const Texture& particleHalf, const Texture& lineardepth, CommandList cmd)
+{
+	static Shader compositePS;
+	static BlendState compositeBlend;
+	static PipelineState compositePSO;
+	static bool bMade = false;
+	if (!bMade)
+	{
+		LoadShader(PS, compositePS, "particlecompositePS.cso");
+		BlendState bd;
+		bd.RenderTarget[0].BlendEnable = true;
+		bd.RenderTarget[0].SrcBlend = BLEND_ONE;
+		bd.RenderTarget[0].DestBlend = BLEND_SRC_ALPHA;
+		bd.RenderTarget[0].BlendOp = BLEND_OP_ADD;
+		bd.RenderTarget[0].SrcBlendAlpha = BLEND_ZERO;
+		bd.RenderTarget[0].DestBlendAlpha = BLEND_ONE;
+		bd.RenderTarget[0].BlendOpAlpha = BLEND_OP_ADD;
+		bd.RenderTarget[0].RenderTargetWriteMask = COLOR_WRITE_ENABLE_ALL;
+		bd.IndependentBlendEnable = false;
+		compositeBlend = bd;
+		PipelineStateDesc desc;
+		desc.vs = &shaders[VSTYPE_SCREEN];
+		desc.ps = &compositePS;
+		desc.bs = &compositeBlend;
+		desc.rs = &rasterizers[RSTYPE_DOUBLESIDED];
+		desc.dss = &depthStencils[DSSTYPE_XRAY];
+		device->CreatePipelineState(&desc, &compositePSO);
+		bMade = true;
+	}
+	device->EventBegin("Particles - Half Resolution Composite", cmd);
+	device->BindPipelineState(&compositePSO, cmd);
+	BindConstantBuffers(PS, cmd);
+	device->BindResource(PS, &particleHalf, TEXSLOT_ONDEMAND0, cmd);
+	device->BindResource(PS, &lineardepth, TEXSLOT_LINEARDEPTH, cmd);
+	device->Draw(3, 0, cmd);
+	device->EventEnd(cmd);
 }
 
 
