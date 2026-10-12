@@ -494,6 +494,8 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		else if (material.GetBlendMode() == BLENDMODE_PREMULTIPLIED) cb.xParticleLocalOptions |= 16;
 		// and drawn at half resolution (its screen position reads the scene's depth at twice it)
 		if (wiRenderer::GetParticleHalfResolutionEnabled() && IsHalfResolution()) cb.xParticleLocalOptions |= 32;
+		// and a wrapping volume (its particles kept in its box, streaked by their motion relative to it)
+		if (IsWrapVolume()) cb.xParticleLocalOptions |= 64;
 
 		// GG: the path since the last frame for a trail: none the first frame, after a skipped frame (a reused or hidden
 		// effect) or after a jump no craft makes in a frame (a teleport)

@@ -111,8 +111,19 @@ VertextoPixel main(uint vertexID : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
 	quadPos *= size;
 
 	// scale the billboard along view space motion vector:
-
-	quadPos += dot(quadPos, velocity) * velocity * xParticleMotionBlurAmount;
+	// GG: a wrapping volume's (xParticleLocalOptions 64) along its motion relative to the emitter, which moves with the
+	// camera, so rain streaks past a fast craft: as long as its own motion gives at rest, longer with the speed between
+	// them (the streak's length squared their two speeds' product)
+	float3 streak = velocity;
+	[branch]
+	if ((xParticleLocalOptions & 64) && xEmitterPrevValid > 0 && g_xFrame_DeltaTime > 0)
+	{
+		const float3 emitterVelocity = (mul(xEmitterWorld, float4(0, 0, 0, 1)).xyz - xEmitterPrevPos) / g_xFrame_DeltaTime;
+		const float3 relative = particle.velocity - emitterVelocity;
+		const float relativeSpeed = length(relative);
+		streak = relativeSpeed > 0 ? mul((float3x3)g_xCamera_View, relative) * sqrt(length(particle.velocity) / relativeSpeed) : 0;
+	}
+	quadPos += dot(quadPos, streak) * streak * xParticleMotionBlurAmount;
 
 
 	// copy to output:

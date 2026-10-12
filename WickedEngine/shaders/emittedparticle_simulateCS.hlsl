@@ -109,6 +109,25 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
 			// GG: relative to the air, so the particles slow toward the wind's velocity (none by default, as before)
 			particle.velocity = xParticleWind + (particle.velocity - xParticleWind) * xParticleDrag;
 
+			// GG: a wrapping volume (xParticleLocalOptions 64): a particle that has left the emitter's box (its world matrix's
+			// unit cube, where a volume emits) comes back in through the opposite face, so a box moved with the camera stays
+			// full at any speed
+			[branch]
+			if (xParticleLocalOptions & 64)
+			{
+				const float3x3 box = (float3x3)xEmitterWorld;
+				const float3 c0 = cross(box[1], box[2]), c1 = cross(box[2], box[0]), c2 = cross(box[0], box[1]);
+				const float det = dot(box[0], c0);
+				[branch]
+				if (abs(det) > 1e-6)
+				{
+					const float3 centre = mul(xEmitterWorld, float4(0, 0, 0, 1)).xyz;
+					const float3 local = mul(transpose(float3x3(c0, c1, c2)), particle.position - centre) / det;
+					const float3 wrapped = local - 2 * floor((local + 1) * 0.5f);
+					if (any(wrapped != local)) particle.position = centre + mul(box, wrapped);
+				}
+			}
+
 			[branch]
 			if (xEmitterOptions & EMITTER_OPTION_BIT_SPH_ENABLED)
 			{
