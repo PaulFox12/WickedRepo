@@ -138,6 +138,12 @@ public:
 	wiGraphics::Texture depthBuffer_Copy1; // used for disocclusion check
 	wiGraphics::Texture depthBuffer_Reflection; // used for reflection, single sample
 	wiGraphics::Texture rtLinearDepth; // linear depth result + mipchain (max filter)
+	// GG: the depth before the weapons are drawn into it, and its linear depth, for the AO (a gun in the AO's depth hides the
+	// corners behind it, and its outline left a halo without occlusion); whether this frame's AO reads them
+	wiGraphics::Texture depthBuffer_NoWeapons;
+	wiGraphics::Texture rtLinearDepthAO;
+	wiGraphics::RenderPass renderpass_depthprepass_weapons;
+	mutable bool bAODepthNoWeapons = false;
 
 	wiGraphics::RenderPass renderpass_depthprepass;
 	wiGraphics::RenderPass renderpass_main;

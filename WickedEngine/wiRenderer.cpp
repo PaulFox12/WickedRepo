@@ -111,6 +111,9 @@ extern bool bReflectionsLowestLOD;
 #endif
 #endif
 
+// GG: the weapon subsets the last DRAWSCENE_COUNTWEAPONS draw met (one draw on one thread, the main camera's prepass)
+static int weaponsCounted = 0;
+
 #ifdef GGREDUCED
 struct TerrainChunkOcclusion
 {
@@ -3697,6 +3700,16 @@ void RenderMeshes(
 					{
 						continue;
 					}
+					// GG: a draw's weapons counted, left out (the depth the AO reads), or drawn alone
+					if (shaderType == MaterialComponent::SHADERTYPE_WEAPON)
+					{
+						if (renderTypeFlags & RENDERTYPE_GG_COUNTWEAPONS) weaponsCounted++;
+						if (renderTypeFlags & RENDERTYPE_GG_NOWEAPONS) continue;
+					}
+					else if (renderTypeFlags & RENDERTYPE_GG_ONLYWEAPONS)
+					{
+						continue;
+					}
 					bool subsetRenderable = renderTypeFlags & material.GetRenderTypes();
 					if (renderPass == RENDERPASS_SHADOW || renderPass == RENDERPASS_SHADOWCUBE)
 					{
@@ -6346,6 +6359,7 @@ void DrawSoftParticles_Distance(
 // back to front together into a target a quarter the pixels after the transparent pass, then laid over the scene by depth
 // (DrawParticleHalfComposite); the overdraw of big soft smoke costs a quarter. They draw over the transparent meshes and the
 // full resolution particles, as one layer
+int GetWeaponsCounted() { return weaponsCounted; }
 void SetParticleHalfResolutionEnabled(bool value) { particleHalfResolution = value; }
 bool GetParticleHalfResolutionEnabled() { return particleHalfResolution; }
 
@@ -7688,6 +7702,15 @@ void DrawScene(
 	{
 		renderTypeFlags = RENDERTYPE_ALL;
 	}
+#ifdef GGREDUCED
+	if (flags & DRAWSCENE_NOWEAPONS) renderTypeFlags |= RENDERTYPE_GG_NOWEAPONS;
+	if (flags & DRAWSCENE_ONLYWEAPONS) renderTypeFlags |= RENDERTYPE_GG_ONLYWEAPONS;
+	if (flags & DRAWSCENE_COUNTWEAPONS)
+	{
+		renderTypeFlags |= RENDERTYPE_GG_COUNTWEAPONS;
+		weaponsCounted = 0;
+	}
+#endif
 
 	RenderQueue renderQueue;
 	for (uint32_t instanceIndex : vis.visibleObjects)

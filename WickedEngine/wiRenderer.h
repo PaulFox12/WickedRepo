@@ -197,7 +197,13 @@ namespace wiRenderer
 		DRAWSCENE_HAIRPARTICLE = 1 << 4,
 		DRAWSCENE_OCEAN = 1 << 5,
 		DRAWSCENE_REFLECTIONS = 1 << 6,
+		// GG: its weapons left out, or only they drawn, or counted (GetWeaponsCounted)
+		DRAWSCENE_NOWEAPONS = 1 << 7,
+		DRAWSCENE_ONLYWEAPONS = 1 << 8,
+		DRAWSCENE_COUNTWEAPONS = 1 << 9,
 	};
+	// GG: how many weapon subsets the last DRAWSCENE_COUNTWEAPONS draw met
+	int GetWeaponsCounted();
 
 	// Draw the world from a camera. You must call UpdateCameraCB() at least once in this frame prior to this
 	void DrawScene(

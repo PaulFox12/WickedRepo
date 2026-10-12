@@ -555,6 +555,10 @@ void RenderPath3D::ResizeBuffers()
 		device->SetName(&depthBuffer_Copy, "depthBuffer_Copy");
 		device->CreateTexture(&desc, nullptr, &depthBuffer_Copy1);
 		device->SetName(&depthBuffer_Copy1, "depthBuffer_Copy1");
+#ifdef GGREDUCED
+		device->CreateTexture(&desc, nullptr, &depthBuffer_NoWeapons);
+		device->SetName(&depthBuffer_NoWeapons, "depthBuffer_NoWeapons");
+#endif
 
 		for (uint32_t i = 0; i < depthBuffer_Copy.desc.MipLevels; ++i)
 		{
@@ -567,6 +571,12 @@ void RenderPath3D::ResizeBuffers()
 			assert(subresource == i);
 			subresource = device->CreateSubresource(&depthBuffer_Copy1, UAV, 0, 1, i, 1);
 			assert(subresource == i);
+#ifdef GGREDUCED
+			subresource = device->CreateSubresource(&depthBuffer_NoWeapons, SRV, 0, 1, i, 1);
+			assert(subresource == i);
+			subresource = device->CreateSubresource(&depthBuffer_NoWeapons, UAV, 0, 1, i, 1);
+			assert(subresource == i);
+#endif
 		}
 	}
 	{
@@ -599,6 +609,18 @@ void RenderPath3D::ResizeBuffers()
 			subresource_index = device->CreateSubresource(&rtLinearDepth, UAV, 0, 1, i, 1);
 			assert(subresource_index == i);
 		}
+#ifdef GGREDUCED
+		device->CreateTexture(&desc, nullptr, &rtLinearDepthAO);
+		device->SetName(&rtLinearDepthAO, "rtLinearDepthAO");
+		for (uint32_t i = 0; i < desc.MipLevels; ++i)
+		{
+			int subresource_index;
+			subresource_index = device->CreateSubresource(&rtLinearDepthAO, SRV, 0, 1, i, 1);
+			assert(subresource_index == i);
+			subresource_index = device->CreateSubresource(&rtLinearDepthAO, UAV, 0, 1, i, 1);
+			assert(subresource_index == i);
+		}
+#endif
 	}
 
 	// Render passes:
@@ -623,6 +645,27 @@ void RenderPath3D::ResizeBuffers()
 		}
 		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtVirtualTextureReadBack, RenderPassAttachment::LOADOP_CLEAR));
 		device->CreateRenderPass(&desc, &renderpass_depthprepass);
+#ifdef GGREDUCED
+		// GG: the same targets kept, for the weapons drawn after the AO's copy of the depth
+		desc.attachments.clear();
+		desc.attachments.push_back(
+			RenderPassAttachment::DepthStencil(
+				&depthBuffer_Main,
+				RenderPassAttachment::LOADOP_LOAD,
+				RenderPassAttachment::STOREOP_STORE,
+				IMAGE_LAYOUT_SHADER_RESOURCE,
+				IMAGE_LAYOUT_DEPTHSTENCIL,
+				IMAGE_LAYOUT_SHADER_RESOURCE
+			)
+		);
+		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtGbuffer[GBUFFER_VELOCITY], RenderPassAttachment::LOADOP_LOAD));
+		if (getMSAASampleCount() > 1)
+		{
+			desc.attachments.push_back(RenderPassAttachment::Resolve(GetGbuffer_Read(GBUFFER_VELOCITY)));
+		}
+		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtVirtualTextureReadBack, RenderPassAttachment::LOADOP_LOAD));
+		device->CreateRenderPass(&desc, &renderpass_depthprepass_weapons);
+#endif
 
 		desc.attachments.clear();
 		desc.attachments.push_back(RenderPassAttachment::RenderTarget(&rtGbuffer[GBUFFER_COLOR], RenderPassAttachment::LOADOP_DONTCARE));
@@ -1034,6 +1077,11 @@ void RenderPath3D::Render(int mode) const
 	GraphicsDevice* device = wiRenderer::GetDevice();
 	wiJobSystem::context ctx;
 	CommandList cmd;
+#ifdef GGREDUCED
+	// GG: with AO on and a weapon drawn last frame, the AO reads the depth before the weapons (decided here, as the
+	// prepass and the AO are recorded by jobs side by side)
+	bAODepthNoWeapons = getAOEnabled() && wiRenderer::GetWeaponsCounted() > 0;
+#endif
 
 	int cloudIndex = 0;
 	const wiScene::CameraComponent* previousCamera;
@@ -1137,7 +1185,12 @@ void RenderPath3D::Render(int mode) const
 		// write depth for transparent objects that are solid (opaque=100%) like guns and solid doors with windows in		
 		{
 			int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Transparent Objects"); // GG
+#ifdef GGREDUCED
+			// GG: the weapons counted, and left out while the AO reads the depth without them (drawn after its copy)
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, wiRenderer::DRAWSCENE_TRANSPARENT | wiRenderer::DRAWSCENE_COUNTWEAPONS | (bAODepthNoWeapons ? wiRenderer::DRAWSCENE_NOWEAPONS : 0));
+#else
 			wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, wiRenderer::DRAWSCENE_TRANSPARENT);
+#endif
 			WickedGpuRangeEnd(cmd, gpuRange); // GG
 		}
 
@@ -1188,6 +1241,27 @@ void RenderPath3D::Render(int mode) const
 		}
 
 		device->RenderPassEnd(cmd);
+
+#ifdef GGREDUCED
+		// GG: the AO's copy of the depth without the weapons, then the weapons drawn into the depth as before
+		if (bAODepthNoWeapons)
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Prepass - Weapons After AO Depth"); // GG
+			if (getMSAASampleCount() > 1)
+			{
+				wiRenderer::ResolveMSAADepthBuffer(depthBuffer_NoWeapons, depthBuffer_Main, cmd);
+			}
+			else
+			{
+				wiRenderer::CopyTexture2D(depthBuffer_NoWeapons, 0, 0, 0, depthBuffer_Main, 0, cmd);
+			}
+			device->RenderPassBegin(&renderpass_depthprepass_weapons, cmd);
+			device->BindViewports(1, &vp, cmd);
+			wiRenderer::DrawScene(visibility_main, RENDERPASS_PREPASS, cmd, wiRenderer::DRAWSCENE_TRANSPARENT | wiRenderer::DRAWSCENE_ONLYWEAPONS);
+			device->RenderPassEnd(cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
+#endif
 
 #ifdef GGREDUCED
 		if (!g_bNoTerrainRender)
@@ -1242,6 +1316,14 @@ void RenderPath3D::Render(int mode) const
 			wiRenderer::Postprocess_DepthPyramid(depthBuffer_Copy, rtLinearDepth, cmd);
 			WickedGpuRangeEnd(cmd, gpuRange); // GG
 		}
+#ifdef GGREDUCED
+		if (bAODepthNoWeapons)
+		{
+			int gpuRange = WickedGpuRangeBegin(cmd, "Depth Pyramid - AO Without Weapons"); // GG
+			wiRenderer::Postprocess_DepthPyramid(depthBuffer_NoWeapons, rtLinearDepthAO, cmd);
+			WickedGpuRangeEnd(cmd, gpuRange); // GG
+		}
+#endif
 
 		{
 			int gpuRange = WickedGpuRangeBegin(cmd, "AO"); // GG
@@ -1923,6 +2005,12 @@ void RenderPath3D::RenderFrameSetUp(CommandList cmd) const
 void RenderPath3D::RenderAO(CommandList cmd) const
 {
 	wiRenderer::GetDevice()->UnbindResources(TEXSLOT_RENDERPATH_AO, 1, cmd);
+
+#ifdef GGREDUCED
+	// GG: the depth without the weapons when a weapon is drawn (bAODepthNoWeapons)
+	const Texture& rtLinearDepth = bAODepthNoWeapons ? rtLinearDepthAO : this->rtLinearDepth;
+	const Texture& depthBuffer_Copy = bAODepthNoWeapons ? depthBuffer_NoWeapons : this->depthBuffer_Copy;
+#endif
 
 	if (getAOEnabled())
 	{
