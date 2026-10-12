@@ -2160,6 +2160,10 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 		device->BindResource(VS, &rtLinearDepth, TEXSLOT_LINEARDEPTH, cmd);
 
 		device->BindResource(PS, &tiledLightResources.entityTiles_Transparent, TEXSLOT_RENDERPATH_ENTITYTILES, cmd);
+#ifdef GGREDUCED
+		// GG: a lit particle is lit in its vertex shader, by the same tiles' lights
+		device->BindResource(VS, &tiledLightResources.entityTiles_Transparent, TEXSLOT_RENDERPATH_ENTITYTILES, cmd);
+#endif
 		device->BindResource(PS, &rtLinearDepth, TEXSLOT_LINEARDEPTH, cmd);
 		device->BindResource(PS, getReflectionsEnabled() ? &rtReflection : wiTextureHelper::getTransparent(), TEXSLOT_RENDERPATH_REFLECTION, cmd);
 		device->BindResource(PS, &rtSceneCopy, TEXSLOT_RENDERPATH_REFRACTION, cmd);

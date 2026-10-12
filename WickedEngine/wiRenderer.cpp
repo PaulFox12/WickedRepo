@@ -6313,6 +6313,9 @@ void DrawSoftParticles_Distance(
 			BindConstantBuffers(VS, cmd);
 			BindConstantBuffers(PS, cmd);
 			device->BindResource(PS, &linearparticledepth, TEXSLOT_LINEARDEPTH, cmd);
+			// GG: a lit particle is lit in its vertex shader: its shadows and the environment's ambient there too
+			BindShadowmaps(VS, cmd);
+			device->BindResource(VS, &vis.scene->envmapArray, TEXSLOT_ENVMAPARRAY, cmd);
 			bRenderStarted = true;
 		}
 		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];

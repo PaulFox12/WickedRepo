@@ -22,6 +22,7 @@ namespace wiScene
 {
 
 static Shader		vertexShader;
+static Shader		vertexShaderLighting; // GG: a lit particle's, lit at its corners and centre (SOFT_LIGHTING)
 static Shader		meshShader;
 static Shader		pixelShader[wiEmittedParticle::PARTICLESHADERTYPE_COUNT];
 static Shader		kickoffUpdateCS;
@@ -826,6 +827,10 @@ void wiEmittedParticle::Draw(const CameraComponent& camera, const MaterialCompon
 	device->BindConstantBuffer(VS, &constantBuffer, CB_GETBINDSLOT(EmittedParticleCB), cmd);
 	device->BindConstantBuffer(PS, &constantBuffer, CB_GETBINDSLOT(EmittedParticleCB), cmd);
 	device->BindConstantBuffer(PS, &material.constantBuffer, CB_GETBINDSLOT(MaterialCB), cmd);
+#ifdef GGREDUCED
+	// a lit particle is lit in its vertex shader, by its material as the pixel shader was
+	if (shaderType == SOFT_LIGHTING) device->BindConstantBuffer(VS, &material.constantBuffer, CB_GETBINDSLOT(MaterialCB), cmd);
+#endif
 
 	if (ALLOW_MESH_SHADER && device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_MESH_SHADER))
 	{
@@ -858,6 +863,7 @@ namespace wiEmittedParticle_Internal
 		std::string path = wiRenderer::GetShaderPath();
 
 		wiRenderer::LoadShader(VS, vertexShader, "emittedparticleVS.cso");
+		wiRenderer::LoadShader(VS, vertexShaderLighting, "emittedparticleVS_lighting.cso");
 
 		if (ALLOW_MESH_SHADER && wiRenderer::GetDevice()->CheckCapability(GRAPHICSDEVICE_CAPABILITY_MESH_SHADER))
 		{
@@ -906,6 +912,9 @@ namespace wiEmittedParticle_Internal
 			for (int j = 0; j < wiEmittedParticle::PARTICLESHADERTYPE_COUNT; ++j)
 			{
 				desc.ps = &pixelShader[j];
+#ifdef GGREDUCED
+				if (desc.vs != nullptr) desc.vs = j == wiEmittedParticle::SOFT_LIGHTING ? &vertexShaderLighting : &vertexShader;
+#endif
 				device->CreatePipelineState(&desc, &PSO[i][j]);
 			}
 		}

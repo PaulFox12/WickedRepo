@@ -2,6 +2,48 @@
 #include "ShaderInterop_EmittedParticle.h"
 #include "emittedparticleHF.hlsli"
 
+#ifdef EMITTEDPARTICLE_LIGHTING
+// GG: a lit particle is lit here, at each corner and at its centre, rather than by every pixel it covers (the pixel shader
+// shades with them); no decals or voxel light on a particle
+#define DISABLE_DECALS
+#define DISABLE_VOXELGI
+#include "objectHF.hlsli"
+
+// the light at a point of the sprite facing N (world space), as the pixel shader lit it: the lights of the screen tile the
+// point falls in (nearest the screen's edge for one off it), their shadows, the ambient and the environment's
+float3 ParticleLight(float3 P, float3 N)
+{
+	Lighting lighting;
+	lighting.create(0, 0, GetAmbient(N), 0);
+
+	Surface surface;
+	surface.create(g_xMaterial, float4(1, 1, 1, 1), 0);
+	surface.P = P;
+	surface.N = N;
+	surface.V = 0;
+	const float4 clip = mul(g_xCamera_VP, float4(P, 1));
+	const float2 ndc = clip.xy / max(clip.w, 0.0001);
+	surface.pixel = clamp((ndc * float2(0.5, -0.5) + 0.5) * g_xFrame_InternalResolution, 0, g_xFrame_InternalResolution - 1);
+	surface.sss = g_xMaterial.subsurfaceScattering;
+	surface.sss_inv = g_xMaterial.subsurfaceScattering_inv;
+	surface.update();
+
+	float3 envAmbient = 0;
+	TiledLighting(surface, lighting, envAmbient);
+	return lighting.direct.diffuse + lighting.indirect.diffuse + envAmbient;
+}
+
+// the sprite's rounded normal at a place on it (0-1 across, unrotated), as the pixel shader made it
+float3 ParticleNormal(float2 unrotated_uv)
+{
+	float3 N;
+	N.x = -cos(PI * unrotated_uv.x);
+	N.y = cos(PI * unrotated_uv.y);
+	N.z = -sin(PI * length(unrotated_uv));
+	return normalize(mul((float3x3)g_xCamera_InvV, N));
+}
+#endif // EMITTEDPARTICLE_LIGHTING
+
 #define PIHALF 1.5707963265f
 static const float3 BILLBOARD[] = {
 	float3(-1, -1, 0),	// 0
@@ -106,6 +148,11 @@ VertextoPixel main(uint vertexID : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
 
 	Out.unrotated_uv = quadPos.xy * float2(1, -1) / size * 0.5f + 0.5f;
 	Out.frameBlend = frameBlend;
+
+#ifdef EMITTEDPARTICLE_LIGHTING
+	Out.litCorner = ParticleLight(Out.P, ParticleNormal(Out.unrotated_uv));
+	Out.litCentre = ParticleLight(particle.position, ParticleNormal(float2(0.5, 0.5)));
+#endif // EMITTEDPARTICLE_LIGHTING
 
 	return Out;
 }

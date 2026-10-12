@@ -60,40 +60,10 @@ float4 main(VertextoPixel input) : SV_TARGET
 
 #ifdef EMITTEDPARTICLE_LIGHTING
 
-	[branch]
-	if (color.a > 0)
-	{
-
-		float3 N;
-		N.x = -cos(PI * input.unrotated_uv.x);
-		N.y = cos(PI * input.unrotated_uv.y);
-		N.z = -sin(PI * length(input.unrotated_uv));
-		N = mul((float3x3)g_xCamera_InvV, N);
-		N = normalize(N);
-
-		Lighting lighting;
-		lighting.create(0, 0, GetAmbient(N), 0);
-
-		Surface surface;
-		surface.create(g_xMaterial, color, 0);
-		surface.P = input.P;
-		surface.N = N;
-		surface.V = 0;
-		surface.pixel = pixel;
-		surface.sss = g_xMaterial.subsurfaceScattering;
-		surface.sss_inv = g_xMaterial.subsurfaceScattering_inv;
-		surface.update();
-
-		float3 envAmbient = 0;
-		TiledLighting(surface, lighting, envAmbient);
-		lighting.indirect.diffuse += envAmbient;
-
-		color.rgb *= lighting.direct.diffuse + lighting.indirect.diffuse;
-
-		//color.rgb = float3(unrotated_uv, 0);
-		//color.rgb = float3(input.tex, 0);
-
-	}
+	// GG: lit in the vertex shader at the sprite's corners and its centre, not by every pixel: the centre's light in the
+	// middle, the corners' towards the edges, so a big sprite keeps the rounded shading the pixels gave it
+	const float edge = saturate(length(input.unrotated_uv - 0.5) * 2);
+	color.rgb *= lerp(input.litCentre, input.litCorner, edge);
 
 #endif // EMITTEDPARTICLE_LIGHTING
 
