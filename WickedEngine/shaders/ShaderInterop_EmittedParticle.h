@@ -136,6 +136,10 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 	float3 xParticleWind;
 	float xParticleWindPadding;
 
+	// GG: the motion a wrapping volume's streaks are drawn against (world), when set (1, else 0: the emitter's own)
+	float3 xEmitterWrapMotion;
+	float xEmitterWrapMotionSet;
+
 };
 
 static const uint THREADCOUNT_EMIT = 256;

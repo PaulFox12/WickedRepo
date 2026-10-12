@@ -197,6 +197,10 @@ public:
 	// GG: the air's velocity for this layer (world, units a second), set at runtime: its drag slows the particles toward
 	// it instead of to a stop, so they drift at the wind's speed, and a layer without drag isn't moved by it
 	XMFLOAT3 layer_wind = XMFLOAT3(0, 0, 0);
+	// GG: the motion a wrapping volume's streaks are drawn against (world, units a second), set at runtime where the
+	// effect rides the camera, so a swinging camera bends no streak; while unset, the emitter's own motion
+	XMFLOAT3 wrap_motion = XMFLOAT3(0, 0, 0);
+	bool bWrapMotion = false;
 	// GG: where the emitter was at its last update, and in which frame, for a trail (wpe_filler_3 bit 2)
 	mutable XMFLOAT3 prev_emitter_pos = XMFLOAT3(0, 0, 0);
 	mutable uint64_t prev_emitter_frame = 0;

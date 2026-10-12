@@ -506,6 +506,8 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xEmitterPrevValid = bPrevValid ? 1.0f : 0.0f;
 		cb.xParticleWind = layer_wind;
 		cb.xParticleWindPadding = 0;
+		cb.xEmitterWrapMotion = wrap_motion;
+		cb.xEmitterWrapMotionSet = bWrapMotion ? 1.0f : 0.0f;
 		prev_emitter_pos = emitterPos;
 		prev_emitter_frame = frame;
 
