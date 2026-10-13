@@ -264,6 +264,9 @@ namespace wiRenderer
 		float distance
 	);
 	// GG: the emitters marked for half resolution, drawn together into a quarter of the pixels and laid over the scene
+	// GG: the directional light's shadow cascades built from a rotation of their own (a light's rotation, world), so a
+	// script can turn the sun's light every frame and its shadows in steps; unset, the light's own
+	void SetSunShadowRotation(bool bSet, const XMFLOAT4& rotation);
 	void SetParticleHalfResolutionEnabled(bool value);
 	bool GetParticleHalfResolutionEnabled();
 	bool HasHalfResolutionParticles(const Visibility& vis);

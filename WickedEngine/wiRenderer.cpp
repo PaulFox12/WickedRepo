@@ -3114,6 +3114,15 @@ bool bUpdateCascade[CASCADE_COUNT];
 #endif
 #endif
 
+// GG: the sun's shadows' own rotation, when set (SetSunShadowRotation)
+static bool g_bSunShadowRotation = false;
+static XMFLOAT4 g_SunShadowRotation = XMFLOAT4(0, 0, 0, 1);
+void SetSunShadowRotation(bool bSet, const XMFLOAT4& rotation)
+{
+	g_bSunShadowRotation = bSet;
+	g_SunShadowRotation = rotation;
+}
+
 inline void CreateDirLightShadowCams(const LightComponent& light, CameraComponent camera, std::array<SHCAM, CASCADE_COUNT>& shcams)
 {
 	if (GetTemporalAAEnabled())
@@ -3123,7 +3132,7 @@ inline void CreateDirLightShadowCams(const LightComponent& light, CameraComponen
 		camera.UpdateCamera();
 	}
 
-	const XMMATRIX lightRotation = XMMatrixRotationQuaternion(XMLoadFloat4(&light.rotation));
+	const XMMATRIX lightRotation = XMMatrixRotationQuaternion(XMLoadFloat4(g_bSunShadowRotation ? &g_SunShadowRotation : &light.rotation));
 	const XMVECTOR to = XMVector3TransformNormal(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f), lightRotation);
 	const XMVECTOR up = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), lightRotation);
 #ifdef GGREDUCED
