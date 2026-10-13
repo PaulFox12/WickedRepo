@@ -488,7 +488,9 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xParticleFadeOutStart = wiMath::Clamp(wpe_filler_1, 0.0f, 0.99f);
 		cb.xParticleMirror = (uint32_t)wiMath::Clamp(wpe_filler_2, 0.0f, 3.0f);
 		cb.xParticleEmissiveMap = material.textures[MaterialComponent::EMISSIVEMAP].resource != nullptr ? 1 : 0;
-		cb.xParticleLocalOptions = (uint32_t)wiMath::Clamp(wpe_filler_3, 0.0f, 7.0f);
+		// its own options' low three bits (the higher ones, 8 half resolution and 16 a wrapping volume, are passed as the
+		// renderer's below; clamped to 7, a layer with either had all three, its fog off)
+		cb.xParticleLocalOptions = (uint32_t)std::max(0.0f, wpe_filler_3) & 7;
 		// GG: how it blends, for the fog
 		if (material.GetBlendMode() == BLENDMODE_ADDITIVE) cb.xParticleLocalOptions |= 8;
 		else if (material.GetBlendMode() == BLENDMODE_PREMULTIPLIED) cb.xParticleLocalOptions |= 16;
