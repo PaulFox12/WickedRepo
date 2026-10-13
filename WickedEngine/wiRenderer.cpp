@@ -3126,7 +3126,18 @@ inline void CreateDirLightShadowCams(const LightComponent& light, CameraComponen
 	const XMMATRIX lightRotation = XMMatrixRotationQuaternion(XMLoadFloat4(&light.rotation));
 	const XMVECTOR to = XMVector3TransformNormal(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f), lightRotation);
 	const XMVECTOR up = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), lightRotation);
+#ifdef GGREDUCED
+	// GG: the light view's eye at the nearest point of a 2,000 unit grid to the camera rather than at the world's origin.
+	// The sun turning moves a point across the shadow map by its distance from the eye, so far from the origin (the
+	// game's map reaches 100,000 units and more) each redraw put every edge at a new phase of the texels: shimmer as the
+	// game's clock turns the sun. Within a cell the eye stays put, so the texel snapping below still holds the cascades
+	// steady as the camera moves; crossing one, the edges settle once
+	const float fLightEyeCell = 2000.0f;
+	const XMVECTOR lightEye = XMVectorSet(floorf(camera.Eye.x / fLightEyeCell + 0.5f) * fLightEyeCell, floorf(camera.Eye.y / fLightEyeCell + 0.5f) * fLightEyeCell, floorf(camera.Eye.z / fLightEyeCell + 0.5f) * fLightEyeCell, 0.0f);
+	const XMMATRIX lightView = XMMatrixLookToLH(lightEye, to, up);
+#else
 	const XMMATRIX lightView = XMMatrixLookToLH(XMVectorZero(), to, up); // important to not move (zero out eye vector) the light view matrix itself because texel snapping must be done on projection matrix!
+#endif
 	const float nearPlane = camera.zNearP;
 	const float farPlane = camera.zFarP;
 #ifdef GGREDUCED
