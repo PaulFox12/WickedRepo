@@ -205,6 +205,19 @@ void main(uint3 DTid : SV_DispatchThreadID)
 	if (is_distortion)
 	{
 		distortion = input_distortion.SampleLevel(sampler_linear_clamp, uv, 0).rg;
+		// GG: the offset dropped where it would fetch something nearer than this pixel (the first person gun, a wall's edge in
+		// front of a far fire), which the haze copied out into itself; the haze bends only what lies behind it, and what is
+		// farther than this pixel, the horizon, still shimmers
+		[branch]
+		if (any(distortion != 0))
+		{
+			const float depthHere = texture_lineardepth.SampleLevel(sampler_point_clamp, uv, 0);
+			const float depthThere = texture_lineardepth.SampleLevel(sampler_point_clamp, uv + distortion, 0);
+			if (depthThere < depthHere * 0.8)
+			{
+				distortion = 0;
+			}
+		}
 	}
 
 	float4 hdr = input.SampleLevel(sampler_linear_clamp, uv + distortion, 0);
