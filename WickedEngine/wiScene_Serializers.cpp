@@ -220,6 +220,18 @@ namespace wiScene
 				if (!x.name.empty())
 				{
 					x.name = dir + x.name;
+					// GG: a .dds beside the .png (or .jpg) the file names is loaded in its place when there is one, for its smaller
+					// footprint (the particle sheets' DDS copies)
+					const size_t dot = x.name.find_last_of('.');
+					if (dot != std::string::npos)
+					{
+						const std::string ext = wiHelper::toUpper(x.name.substr(dot));
+						if (ext == ".PNG" || ext == ".JPG" || ext == ".JPEG" || ext == ".TGA")
+						{
+							const std::string dds = x.name.substr(0, dot) + ".dds";
+							if (wiHelper::FileExists(dds)) x.name = dds;
+						}
+					}
 				}
 			}
 
