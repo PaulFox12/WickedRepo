@@ -107,7 +107,8 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
 
 			// drag: 
 			// GG: relative to the air, so the particles slow toward the wind's velocity (none by default, as before)
-			particle.velocity = xParticleWind + (particle.velocity - xParticleWind) * xParticleDrag;
+			// GG: the drag per 60th of a second, so a layer slows the same at any frame rate (as at 60 frames a second before)
+			particle.velocity = xParticleWind + (particle.velocity - xParticleWind) * (xParticleDrag > 0 ? pow(xParticleDrag, dt * 60) : 0);
 
 			// GG: a wrapping volume (xParticleLocalOptions 64): a particle that has left the emitter's box (its world matrix's
 			// unit cube, where a volume emits) comes back in through the opposite face, so a box moved with the camera stays

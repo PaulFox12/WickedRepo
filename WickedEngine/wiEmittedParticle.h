@@ -161,7 +161,7 @@ public:
 	bool bTriggerUnderWater = false;
 
 	float randemit = 0;
-	uint32_t randpause = 0;
+	float randpause = 0; // GG: in 60ths of a second
 	float distance_sort_bias = 0;
 	float wpe_filler_1 = 0; // GG: the fade-out start, the share of a particle's life it stays fully opaque (0 fades over all of it)
 	float wpe_filler_2 = 0; // GG: the random mirroring a particle may take, bit 1 left-right, bit 2 upside down (0 none)

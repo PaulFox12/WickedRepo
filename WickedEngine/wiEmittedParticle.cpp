@@ -259,13 +259,13 @@ void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 	//static float randnum = 0;
 	//static uint32_t randcount = 0;
 
-	if (randpause == 0)
+	if (randpause <= 0.01f) // GG: counted in 60ths of a second below, not frames
 	{
-		randpause = ((wiRandom::getRandom(0, 1000) * 0.001f) * spawn_random);
+		randpause = (float)(uint32_t)((wiRandom::getRandom(0, 1000) * 0.001f) * spawn_random);
 		if (randpause < (spawn_random * 0.6))
 			randpause = 0;
 		else
-			randpause -= (spawn_random * 0.5);
+			randpause = (float)(uint32_t)(randpause - spawn_random * 0.5);
 		if(randpause > spawn_random)
 			randpause = 0;
 
@@ -276,8 +276,9 @@ void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 	else
 	{
 		emit += randemit * dt;
-		randemit *= 0.05;
-		randpause--;
+		// GG: the decay and the pause per 60th of a second, so the stutter keeps its timing at any frame rate
+		randemit *= powf(0.05f, dt * 60.0f);
+		randpause -= dt * 60.0f;
 	}
 
 	if (emit < 0)
@@ -292,10 +293,21 @@ void wiEmittedParticle::UpdateCPU(const TransformComponent& transform, float dt)
 	{
 		if (burst_split > 0)
 		{
-			float amount = burst / burst_split;
-			emit += amount;
-			burst -= amount;
-			if (burst < 0) burst = 0;
+			// GG: a burst_split'th of what is left each 60th of a second whatever the frame rate, the count taken down by whole
+			// particles, rounded up (as the int burst had it); a split of 1 or less releases it at once
+			if (burst_split <= 1.0f)
+			{
+				emit += (float)burst / burst_split;
+				burst = 0;
+			}
+			else if (dt > 0)
+			{
+				const float share = 1.0f - powf(1.0f - 1.0f / burst_split, dt * 60.0f);
+				const float amount = (float)burst * share;
+				emit += amount;
+				burst -= std::max(1, (int)ceilf(amount));
+				if (burst < 0) burst = 0;
+			}
 
 		}
 		else
