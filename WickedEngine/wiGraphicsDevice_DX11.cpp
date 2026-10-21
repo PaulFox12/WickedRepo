@@ -10,6 +10,9 @@
 #include <sstream>
 #include <algorithm>
 #include <mutex>
+#include <map>
+#include <cstdio>
+#include <dxgi1_4.h>
 
 #ifdef GGREDUCED
 #ifdef OPTICK_ENABLE
@@ -1134,6 +1137,120 @@ namespace DX11_Internal
 	const void* const __nullBlob[128] = {}; // this is initialized to nullptrs and used to unbind resources!
 
 
+	// GGMAX: VRAM CENSUS (the DX12 engine's DUMP_VRAM, here for a like-for-like comparison of the two builds). Every
+	// texture and buffer is recorded at create time with its estimated byte size and descriptor, named when SetName
+	// arrives, erased when the resource goes. One map insert and erase per resource lifetime, nothing per frame.
+	struct GGVramRec
+	{
+		unsigned long long bytes = 0;
+		unsigned long long desc_size = 0;
+		unsigned int kind = 0;             // 0=texture 1=buffer
+		unsigned int width = 0, height = 0, depth = 0, mips = 0, arraysize = 0, samples = 0;
+		unsigned int format = 0, bind_flags = 0, misc_flags = 0, usage = 0, aliased = 0;
+		char name[192] = {};
+	};
+	static std::mutex gg_vram_mutex;
+	static std::map<const void*, GGVramRec>* gg_vram_live = nullptr; // heap-allocated, never freed: resources outlive static destruction
+	static ID3D11Device* gg_vram_d3ddevice = nullptr;
+	static void gg_vram_register(const void* key, const GGVramRec& rec)
+	{
+		std::scoped_lock lck(gg_vram_mutex);
+		if (gg_vram_live == nullptr) gg_vram_live = new std::map<const void*, GGVramRec>();
+		(*gg_vram_live)[key] = rec;
+	}
+	static void gg_vram_setname(const void* key, const char* name)
+	{
+		if (name == nullptr) return;
+		std::scoped_lock lck(gg_vram_mutex);
+		if (gg_vram_live == nullptr) return;
+		auto it = gg_vram_live->find(key);
+		if (it == gg_vram_live->end()) return;
+		strncpy_s(it->second.name, sizeof(it->second.name), name, _TRUNCATE);
+	}
+	static void gg_vram_unregister(const void* key)
+	{
+		std::scoped_lock lck(gg_vram_mutex);
+		if (gg_vram_live == nullptr) return;
+		gg_vram_live->erase(key);
+	}
+	static void gg_vram_driver(unsigned long long* usage, unsigned long long* budget)
+	{
+		*usage = 0; *budget = 0;
+		if (gg_vram_d3ddevice == nullptr) return;
+		ComPtr<IDXGIDevice> dxgiDevice;
+		if (FAILED(gg_vram_d3ddevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))) return;
+		ComPtr<IDXGIAdapter> adapter;
+		if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
+		ComPtr<IDXGIAdapter3> adapter3;
+		if (FAILED(adapter.As(&adapter3))) return;
+		DXGI_QUERY_VIDEO_MEMORY_INFO info = {};
+		if (FAILED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) return;
+		*usage = info.CurrentUsage; *budget = info.Budget;
+	}
+	void GG_GetVRAMTotals(unsigned long long* out_census, unsigned long long* out_default_heap,
+		unsigned long long* out_driver_usage, unsigned long long* out_driver_budget, unsigned int* out_count)
+	{
+		unsigned long long total = 0, def = 0; unsigned int count = 0;
+		{
+			std::scoped_lock lck(gg_vram_mutex);
+			if (gg_vram_live != nullptr)
+			{
+				for (auto& x : *gg_vram_live)
+				{
+					total += x.second.bytes;
+					if (x.second.usage == 0) def += x.second.bytes;
+					count++;
+				}
+			}
+		}
+		unsigned long long usage = 0, budget = 0;
+		gg_vram_driver(&usage, &budget);
+		if (out_census) *out_census = total;
+		if (out_default_heap) *out_default_heap = def;
+		if (out_driver_usage) *out_driver_usage = usage;
+		if (out_driver_budget) *out_driver_budget = budget;
+		if (out_count) *out_count = count;
+	}
+	// The DX12 census's file format: its allocator and pipeline columns are 0 here, the format column the FORMAT enum's value
+	void GG_DumpVRAMCensus(const char* path)
+	{
+		std::vector<GGVramRec> snapshot;
+		unsigned long long census_total = 0, census_default = 0, census_other = 0;
+		{
+			std::scoped_lock lck(gg_vram_mutex);
+			if (gg_vram_live != nullptr)
+			{
+				snapshot.reserve(gg_vram_live->size());
+				for (auto& x : *gg_vram_live)
+				{
+					snapshot.push_back(x.second);
+					census_total += x.second.bytes;
+					if (x.second.usage == 0) census_default += x.second.bytes; else census_other += x.second.bytes;
+				}
+			}
+		}
+		std::sort(snapshot.begin(), snapshot.end(), [](const GGVramRec& a, const GGVramRec& b) { return a.bytes > b.bytes; });
+		FILE* f = fopen(path, "w");
+		if (f == nullptr) return;
+		unsigned long long usage = 0, budget = 0;
+		gg_vram_driver(&usage, &budget);
+		fprintf(f, "CENSUS v1 records=%llu census_bytes=%llu census_default_heap=%llu census_upload_readback=%llu"
+			" d3d12ma_allocated=0 d3d12ma_blocks=0 driver_usage=%llu driver_budget=%llu swapchain=0"
+			" pso_creates=0 pso_compiles=0 pso_driver_eager=0 descheap_bytes=0 cmdalloc=0"
+			" pso_compile_ms=0.0 pso_compile_max_ms=0.0 d3d12ma_allocated_video=0 d3d12ma_blocks_video=0 engine=dx11\n",
+			(unsigned long long)snapshot.size(), census_total, census_default, census_other, usage, budget);
+		fprintf(f, "# kind bytes w h d mips arr samples fmt bind misc usage alias \"name\"\n");
+		for (const GGVramRec& r : snapshot)
+		{
+			fprintf(f, "%s %llu %u %u %u %u %u %u %u 0x%X 0x%X %u %u \"%s\"\n",
+				r.kind == 0 ? "T" : "B", r.bytes,
+				r.kind == 1 ? (unsigned int)(r.desc_size & 0xFFFFFFFF) : r.width,
+				r.height, r.depth, r.mips, r.arraysize, r.samples, r.format,
+				r.bind_flags, r.misc_flags, r.usage, r.aliased, r.name);
+		}
+		fclose(f);
+	}
+
 	struct Resource_DX11
 	{
 		ComPtr<ID3D11Resource> resource;
@@ -1141,6 +1258,7 @@ namespace DX11_Internal
 		ComPtr<ID3D11UnorderedAccessView> uav;
 		std::vector<ComPtr<ID3D11ShaderResourceView>> subresources_srv;
 		std::vector<ComPtr<ID3D11UnorderedAccessView>> subresources_uav;
+		virtual ~Resource_DX11() { gg_vram_unregister((const void*)this); } // GGMAX: VRAM census
 	};
 	struct Texture_DX11 : public Resource_DX11
 	{
@@ -1813,6 +1931,22 @@ bool GraphicsDevice_DX11::CreateBuffer(const GPUBufferDesc *pDesc, const Subreso
 		}
 	}
 
+	// GGMAX: VRAM census registration
+	if (SUCCEEDED(hr))
+	{
+		GGVramRec rec;
+		rec.kind = 1;
+		rec.bytes = pDesc->ByteWidth;
+		rec.desc_size = pDesc->ByteWidth;
+		rec.width = pDesc->StructureByteStride;
+		rec.format = (unsigned int)pDesc->Format;
+		rec.bind_flags = pDesc->BindFlags;
+		rec.misc_flags = pDesc->MiscFlags;
+		rec.usage = (unsigned int)pDesc->Usage;
+		gg_vram_register((const void*)internal_state.get(), rec);
+		if (gg_vram_d3ddevice == nullptr) gg_vram_d3ddevice = device.Get();
+	}
+
 	return SUCCEEDED(hr);
 }
 bool GraphicsDevice_DX11::CreateTexture(const TextureDesc* pDesc, const SubresourceData *pInitialData, Texture *pTexture) const
@@ -1907,6 +2041,31 @@ bool GraphicsDevice_DX11::CreateTexture(const TextureDesc* pDesc, const Subresou
 	if (pTexture->desc.BindFlags & BIND_UNORDERED_ACCESS)
 	{
 		CreateSubresource(pTexture, UAV, 0, -1, 0, -1);
+	}
+
+	// GGMAX: VRAM census registration (the final desc; bytes from the mip chain, block formats by their 4x4 blocks)
+	if (SUCCEEDED(hr))
+	{
+		const TextureDesc& d = pTexture->desc;
+		unsigned long long bytes = 0;
+		const unsigned long long stride = GetFormatStride(d.Format);
+		const bool block = IsFormatBlockCompressed(d.Format);
+		for (uint32_t m = 0; m < std::max(1u, d.MipLevels); ++m)
+		{
+			unsigned long long w = std::max(1u, d.Width >> m), h = std::max(1u, d.Height >> m), dep = std::max(1u, d.Depth >> m);
+			if (block) bytes += ((w + 3) / 4) * ((h + 3) / 4) * dep * stride;
+			else bytes += w * h * dep * stride;
+		}
+		bytes *= std::max(1u, d.ArraySize) * std::max(1u, d.SampleCount);
+		GGVramRec rec;
+		rec.kind = 0;
+		rec.bytes = bytes;
+		rec.width = d.Width; rec.height = d.Height; rec.depth = d.Depth;
+		rec.mips = d.MipLevels; rec.arraysize = d.ArraySize; rec.samples = d.SampleCount;
+		rec.format = (unsigned int)d.Format;
+		rec.bind_flags = d.BindFlags; rec.misc_flags = d.MiscFlags; rec.usage = (unsigned int)d.Usage;
+		gg_vram_register((const void*)static_cast<Resource_DX11*>(internal_state.get()), rec);
+		if (gg_vram_d3ddevice == nullptr) gg_vram_d3ddevice = device.Get();
 	}
 
 	return SUCCEEDED(hr);
@@ -2917,6 +3076,7 @@ void GraphicsDevice_DX11::SetName(GPUResource* pResource, const char* name)
 		return;
 	}
 #endif
+	gg_vram_setname((const void*)internal_state, name); // GGMAX: VRAM census
 	internal_state->resource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)strlen(name), name);
 }
 
