@@ -6267,6 +6267,7 @@ uint32_t currentemitter = 0;
 wiProfiler::range_id range_particle = 0;
 Texture linearparticledepth;
 bool particleHalfResolution = true; // GG: emitters marked for it drawn at half resolution (SetParticleHalfResolutionEnabled)
+float particleScatter = 0; // GG: the sun's forward scattering on lit particle layers (SetParticleScatter), 0 off
 
 void DrawSoftParticles_Done(
 	const Visibility& vis,
@@ -6414,6 +6415,8 @@ void DrawSoftParticles_Distance(
 int GetWeaponsCounted() { return weaponsCounted; }
 void SetParticleHalfResolutionEnabled(bool value) { particleHalfResolution = value; }
 bool GetParticleHalfResolutionEnabled() { return particleHalfResolution; }
+void SetParticleScatter(float value) { particleScatter = std::max(0.0f, value); }
+float GetParticleScatter() { return particleScatter; }
 
 static bool IsHalfResolutionEmitter(const wiEmittedParticle& emitter)
 {

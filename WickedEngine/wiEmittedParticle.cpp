@@ -519,7 +519,7 @@ void wiEmittedParticle::UpdateGPU(const TransformComponent& transform, const Mat
 		cb.xEmitterPrevPos = bPrevValid ? prev_emitter_pos : emitterPos;
 		cb.xEmitterPrevValid = bPrevValid ? 1.0f : 0.0f;
 		cb.xParticleWind = layer_wind;
-		cb.xParticleWindPadding = 0;
+		cb.xParticleScatter = wiRenderer::GetParticleScatter(); // GG: the sun's forward scattering on the lit layers (0 off)
 		cb.xEmitterWrapMotion = wrap_motion;
 		cb.xEmitterWrapMotionSet = bWrapMotion ? 1.0f : 0.0f;
 		prev_emitter_pos = emitterPos;

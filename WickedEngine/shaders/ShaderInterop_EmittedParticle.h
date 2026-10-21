@@ -134,7 +134,7 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
 
 	// GG: the air's velocity for this emitter (world), which its drag slows the particles toward instead of to a stop
 	float3 xParticleWind;
-	float xParticleWindPadding;
+	float xParticleScatter; // GG: the sun's forward scattering on a lit layer (0 off)
 
 	// GG: the motion a wrapping volume's streaks are drawn against (world), when set (1, else 0: the emitter's own)
 	float3 xEmitterWrapMotion;

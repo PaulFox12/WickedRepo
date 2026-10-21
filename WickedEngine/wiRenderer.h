@@ -269,6 +269,10 @@ namespace wiRenderer
 	void SetSunShadowRotation(bool bSet, const XMFLOAT4& rotation);
 	void SetParticleHalfResolutionEnabled(bool value);
 	bool GetParticleHalfResolutionEnabled();
+	// GG: the sun's forward scattering on lit particle layers: a cloud with the sun behind it glows, brightest looking toward
+	// the sun through it; 0 off (the default), 1 the phase function as it is
+	void SetParticleScatter(float value);
+	float GetParticleScatter();
 	bool HasHalfResolutionParticles(const Visibility& vis);
 	void DrawSoftParticles_Half(const Visibility& vis, wiGraphics::CommandList cmd);
 	void DrawParticleHalfComposite(const wiGraphics::Texture& particleHalf, const wiGraphics::Texture& lineardepth, wiGraphics::CommandList cmd);

@@ -9,6 +9,13 @@
 #define DISABLE_VOXELGI
 #include "objectHF.hlsli"
 
+// GG: the Henyey-Greenstein phase function (g 0.66), as volumetricLightHF's ComputeScattering
+float GGParticlePhase(float lightDotView)
+{
+	const float g = 0.66;
+	return (1 - g * g) / (4 * PI * pow(1 + g * g - 2 * g * lightDotView, 1.5));
+}
+
 // the light at a point of the sprite facing N (world space), as the pixel shader lit it: the lights of the screen tile the
 // point falls in (nearest the screen's edge for one off it), their shadows, the ambient and the environment's
 float3 ParticleLight(float3 P, float3 N)
@@ -30,7 +37,34 @@ float3 ParticleLight(float3 P, float3 N)
 
 	float3 envAmbient = 0;
 	TiledLighting(surface, lighting, envAmbient);
-	return lighting.direct.diffuse + lighting.indirect.diffuse + envAmbient;
+	float3 light = lighting.direct.diffuse + lighting.indirect.diffuse + envAmbient;
+
+	// GG: the sun's forward scattering, by the strength set (SetParticleScatter; 0, the default, skips it): a cloud with the
+	// sun behind it glows, brightest looking toward the sun through it. The sun's light is taken through DirectionalLight
+	// with the surface turned to face it, so its shadow applies (it lights nothing facing away, which a backlit sprite's own
+	// normal does); times PI, as its diffuse carries the BRDF's 1/PI. Directional lights sort first (their distance is 0)
+	[branch]
+	if (xParticleScatter > 0)
+	{
+		const float3 toCamera = normalize(g_xCamera_CamPos - P);
+		const uint count = min(g_xFrame_LightArrayCount, 4u);
+		for (uint i = 0; i < count; ++i)
+		{
+			ShaderEntity sun = EntityArray[g_xFrame_LightArrayOffset + i];
+			if (sun.GetType() != ENTITY_TYPE_DIRECTIONALLIGHT)
+				break;
+			if ((sun.GetFlags() & ENTITY_FLAG_LIGHT_STATIC) || (sun.layerMask & surface.layerMask) == 0)
+				continue;
+			const float3 L = sun.GetDirection();
+			Surface facing = surface;
+			facing.N = L;
+			Lighting sunlight;
+			sunlight.create(0, 0, 0, 0);
+			DirectionalLight(sun, facing, sunlight);
+			light += xParticleScatter * GGParticlePhase(saturate(dot(L, -toCamera))) * sunlight.direct.diffuse * PI;
+		}
+	}
+	return light;
 }
 
 // the sprite's rounded normal at a place on it (0-1 across, unrotated), as the pixel shader made it
