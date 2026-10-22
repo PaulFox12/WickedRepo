@@ -6380,9 +6380,12 @@ void DrawSoftParticles_Distance(
 			BindConstantBuffers(VS, cmd);
 			BindConstantBuffers(PS, cmd);
 			device->BindResource(PS, &linearparticledepth, TEXSLOT_LINEARDEPTH, cmd);
-			// GG: a lit particle is lit in its vertex shader: its shadows and the environment's ambient there too
+			// GG: a lit particle is lit in its vertex shader: its shadows, the environment's ambient and the sky's transmittance
+			// there too (without the transmittance, which DirectionalLight multiplies the sun by under the realistic sky, the
+			// vertex shader read 0: no sunlight on a lit layer, nor its forward scattering)
 			BindShadowmaps(VS, cmd);
 			device->BindResource(VS, &vis.scene->envmapArray, TEXSLOT_ENVMAPARRAY, cmd);
+			device->BindResource(VS, &textures[TEXTYPE_2D_SKYATMOSPHERE_TRANSMITTANCELUT], TEXSLOT_TRANSMITTANCELUT, cmd);
 			bRenderStarted = true;
 		}
 		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];
@@ -6444,6 +6447,7 @@ void DrawSoftParticles_Half(const Visibility& vis, CommandList cmd)
 	device->BindResource(PS, &linearparticledepth, TEXSLOT_LINEARDEPTH, cmd);
 	BindShadowmaps(VS, cmd);
 	device->BindResource(VS, &vis.scene->envmapArray, TEXSLOT_ENVMAPARRAY, cmd);
+	device->BindResource(VS, &textures[TEXTYPE_2D_SKYATMOSPHERE_TRANSMITTANCELUT], TEXSLOT_TRANSMITTANCELUT, cmd); // GG: as above
 	for (size_t i = 0; i < emitterCount; ++i)
 	{
 		const uint32_t emitterIndex = vis.visibleEmitters[emitterSortingHashes[i] & 0x00000FFF];
