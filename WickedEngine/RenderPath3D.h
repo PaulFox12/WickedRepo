@@ -218,6 +218,7 @@ public:
 		}
 		int ldr_postprocess_count = 0;
 		ldr_postprocess_count += getSharpenFilterEnabled() ? 1 : 0;
+		ldr_postprocess_count += getLensRainAmount() > 0 ? 1 : 0; // GG: rain on the lens
 #ifdef GGREDUCED
 		ldr_postprocess_count += getRainEnabled() ? 1 : 0; //Rain
 		ldr_postprocess_count += getSnowEnabled() ? 1 : 0; //Rain
