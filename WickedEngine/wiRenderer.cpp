@@ -5148,6 +5148,17 @@ void UpdateRenderData(
 					(float)rect.x / (float)desc.Width,
 					(float)rect.y / (float)desc.Height
 				);
+#ifdef GGREDUCED
+				// GG: its normal map's place in the atlas (packed beside it at the texture's size, wiScene.cpp), as 16 bits each of
+				// u and v in 65535ths, in cubeRemap, which decals don't use; 0 for none (GGDecalHF.hlsli)
+				auto normalRect = decal.normal != nullptr ? vis.scene->packedDecals.find(decal.normal) : vis.scene->packedDecals.end();
+				if (normalRect != vis.scene->packedDecals.end())
+				{
+					const uint32_t u = (uint32_t)((float)(normalRect->second.x + Scene::atlasClampBorder) / (float)desc.Width * 65535.0f + 0.5f);
+					const uint32_t v = (uint32_t)((float)(normalRect->second.y + Scene::atlasClampBorder) / (float)desc.Height * 65535.0f + 0.5f);
+					entityArray[entityCounter].cubeRemap = std::min(u, 65535u) | (std::min(v, 65535u) << 16);
+				}
+#endif
 			}
 			else
 			{

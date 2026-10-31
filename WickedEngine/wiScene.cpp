@@ -4136,6 +4136,16 @@ OPTICK_EVENT();
 					packedDecals[decal.texture] = newRect;
 					decal_repack_needed = true;
 	}
+				// GG: its normal map too, beside it in the atlas, when it is the texture's size (the decal shader reads it with the
+				// texture's scale, GGDecalHF.hlsli); one of another size is left out
+				if (decal.normal != nullptr && decal.normal->texture.IsValid() && decal.normal != decal.texture
+					&& decal.normal->texture.desc.Width == decal.texture->texture.desc.Width
+					&& decal.normal->texture.desc.Height == decal.texture->texture.desc.Height
+					&& packedDecals.find(decal.normal) == packedDecals.end())
+				{
+					packedDecals[decal.normal] = wiRectPacker::rect_xywh(0, 0, decal.normal->texture.desc.Width + atlasClampBorder * 2, decal.normal->texture.desc.Height + atlasClampBorder * 2);
+					decal_repack_needed = true;
+				}
 			}
 		}
 	}
