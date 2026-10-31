@@ -501,6 +501,24 @@ void RenderPath3D::ResizeBuffers()
 		device->CreateTexture(&desc, nullptr, &rtPostprocess_LDR[1]);
 		device->SetName(&rtPostprocess_LDR[1], "rtPostprocess_LDR[1]");
 
+		{
+			// GG: the lens rain's fog, made here so nothing is created during play
+			TextureDesc blurdesc = desc;
+			blurdesc.BindFlags = BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+			blurdesc.Width = std::max(1u, desc.Width / 4);
+			blurdesc.Height = std::max(1u, desc.Height / 4);
+			device->CreateTexture(&blurdesc, nullptr, &rtLensRainBlur[0]);
+			device->SetName(&rtLensRainBlur[0], "rtLensRainBlur[0]");
+			device->CreateTexture(&blurdesc, nullptr, &rtLensRainBlur[1]);
+			device->SetName(&rtLensRainBlur[1], "rtLensRainBlur[1]");
+			blurdesc.Width = std::max(1u, blurdesc.Width / 4);
+			blurdesc.Height = std::max(1u, blurdesc.Height / 4);
+			device->CreateTexture(&blurdesc, nullptr, &rtLensRainBlur[2]);
+			device->SetName(&rtLensRainBlur[2], "rtLensRainBlur[2]");
+			device->CreateTexture(&blurdesc, nullptr, &rtLensRainBlur[3]);
+			device->SetName(&rtLensRainBlur[3], "rtLensRainBlur[3]");
+		}
+
 #ifndef GGREDUCED
 		desc.Width /= 4;
 		desc.Height /= 4;
@@ -2669,12 +2687,27 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 		// GG: rain on the lens: after the grade and the heat haze's distortion, before the FXAA, under every sprite
 		if (getLensRainAmount() > 0)
 		{
-			wiRenderer::Postprocess_LensRain(*rt_read, *rt_write, cmd,
+			// the fog between the drops: the image blurred at a quarter and a sixteenth of its size
+			const bool fog = getLensRainFog() > 0 && rtLensRainBlur[3].IsValid();
+			if (fog)
+			{
+				device->EventBegin("Lens Rain Fog", cmd);
+				wiRenderer::Postprocess_Downsample4x(*rt_read, rtLensRainBlur[0], cmd);
+				device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+				wiRenderer::Postprocess_Blur_Gaussian(rtLensRainBlur[0], rtLensRainBlur[1], rtLensRainBlur[0], cmd, -1, -1, true);
+				device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+				wiRenderer::Postprocess_Downsample4x(rtLensRainBlur[0], rtLensRainBlur[2], cmd);
+				device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+				wiRenderer::Postprocess_Blur_Gaussian(rtLensRainBlur[2], rtLensRainBlur[3], rtLensRainBlur[2], cmd, -1, -1, true);
+				device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+				device->EventEnd(cmd);
+			}
+			wiRenderer::Postprocess_LensRain(*rt_read, fog ? rtLensRainBlur[0] : *rt_read, fog ? rtLensRainBlur[2] : *rt_read, *rt_write, cmd,
 				XMFLOAT4(getLensRainAmount(), getLensRainSize(), getLensRainFlow().x, getLensRainFlow().y),
 				XMFLOAT4(getLensRainSlide(), getLensRainRefraction(), getLensRainFog(), lensRainTime));
 
 			std::swap(rt_read, rt_write);
-			device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+			device->UnbindResources(TEXSLOT_ONDEMAND0, 3, cmd);
 		}
 
 		#ifdef GGREDUCED

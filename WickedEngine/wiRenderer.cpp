@@ -14705,6 +14705,8 @@ void Postprocess_Sharpen(
 }
 void Postprocess_LensRain(
 	const Texture& input,
+	const Texture& blurNear,
+	const Texture& blurFar,
 	const Texture& output,
 	CommandList cmd,
 	const XMFLOAT4& params0,
@@ -14717,6 +14719,8 @@ void Postprocess_LensRain(
 	device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_LENSRAIN], cmd);
 
 	device->BindResource(CS, &input, TEXSLOT_ONDEMAND0, cmd);
+	device->BindResource(CS, &blurNear, TEXSLOT_ONDEMAND1, cmd);
+	device->BindResource(CS, &blurFar, TEXSLOT_ONDEMAND2, cmd);
 
 	const TextureDesc& desc = output.GetDesc();
 

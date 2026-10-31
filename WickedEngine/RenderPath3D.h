@@ -133,6 +133,7 @@ public:
 	wiGraphics::Texture rtSun[2]; // 0: sun render target used for lightshafts (can be MSAA), 1: radial blurred lightshafts
 	wiGraphics::Texture rtSun_resolved; // sun render target, but the resolved version if MSAA is enabled
 	wiGraphics::Texture rtGUIBlurredBackground[3];	// downsampled, gaussian blurred scene for GUI
+	wiGraphics::Texture rtLensRainBlur[4];	// GG: the lens rain's fog: a quarter size blurred copy of the image and its temp, then a sixteenth size one
 	wiGraphics::Texture rtShadingRate; // UINT8 shading rate per tile
 	wiGraphics::Texture rtFSR[2]; // FSR upscaling result (full resolution LDR)
 
