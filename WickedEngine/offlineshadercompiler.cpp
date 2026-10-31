@@ -245,6 +245,7 @@ int main(int argc, char* argv[])
 		"ssflare_brightCS.hlsl"									,
 		"ssflare_ghostsCS.hlsl"									,
 		"ssflare_combineCS.hlsl"									,
+		"lensrainCS.hlsl"											,
 		"voxelSceneCopyClearCS_TemporalSmoothing.hlsl"				,
 		"normalsfromdepthCS.hlsl"									,
 		"volumetricCloud_shapenoiseCS.hlsl"							,

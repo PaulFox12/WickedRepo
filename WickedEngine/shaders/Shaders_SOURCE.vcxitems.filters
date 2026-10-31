@@ -173,6 +173,9 @@
     <FxCompile Include="$(MSBuildThisFileDirectory)ssflare_combineCS.hlsl">
       <Filter>CS</Filter>
     </FxCompile>
+    <FxCompile Include="$(MSBuildThisFileDirectory)lensrainCS.hlsl">
+      <Filter>CS</Filter>
+    </FxCompile>
     <FxCompile Include="$(MSBuildThisFileDirectory)bloomseparateCS.hlsl">
       <Filter>CS</Filter>
     </FxCompile>

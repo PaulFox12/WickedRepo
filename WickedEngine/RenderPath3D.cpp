@@ -961,6 +961,10 @@ void RenderPath3D::Update(float dt)
 	wiProfiler::EndRange(range2D);
 #endif
 
+	// GG: the lens rain's clock, wrapped long before a float loses the drops' timing
+	if (!lensRainPaused)
+		lensRainTime = std::fmod(lensRainTime + dt, 10000.0f);
+
 	if (getSceneUpdateEnabled())
 	{
 #ifdef GGREDUCED
@@ -2657,6 +2661,17 @@ void RenderPath3D::RenderPostprocessChain(CommandList cmd) const
 		if (getSharpenFilterEnabled())
 		{
 			wiRenderer::Postprocess_Sharpen(*rt_read, *rt_write, cmd, getSharpenFilterAmount());
+
+			std::swap(rt_read, rt_write);
+			device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
+		}
+
+		// GG: rain on the lens: after the grade and the heat haze's distortion, before the FXAA, under every sprite
+		if (getLensRainAmount() > 0)
+		{
+			wiRenderer::Postprocess_LensRain(*rt_read, *rt_write, cmd,
+				XMFLOAT4(getLensRainAmount(), getLensRainSize(), getLensRainFlow().x, getLensRainFlow().y),
+				XMFLOAT4(getLensRainSlide(), getLensRainRefraction(), getLensRainFog(), lensRainTime));
 
 			std::swap(rt_read, rt_write);
 			device->UnbindResources(TEXSLOT_ONDEMAND0, 1, cmd);
