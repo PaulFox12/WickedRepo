@@ -526,6 +526,8 @@ struct VertexSurface
 
 #ifdef OBJECTSHADER_INPUT_TEX
 		uvsets = float4(input.GetUV0() * material.texMulAdd.xy + material.texMulAdd.zw, input.GetUV1());
+		// GG: the object's own texture offset (ObjectComponent::gg_texOffset), 16-bit fractions of a texture
+		uvsets.xy += float2(userdata.w & 0xFFFF, userdata.w >> 16) * (1.0 / 65536.0);
 #endif // OBJECTSHADER_INPUT_TEX
 
 #ifdef OBJECTSHADER_INPUT_ATL

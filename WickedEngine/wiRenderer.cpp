@@ -599,7 +599,8 @@ struct Instance
 		const XMFLOAT4& colorIn = XMFLOAT4(1, 1, 1, 1),
 		float dither = 0,
 		uint32_t subInstance = 0,
-		const XMFLOAT4& emissiveColor = XMFLOAT4(1, 1, 1, 1)
+		const XMFLOAT4& emissiveColor = XMFLOAT4(1, 1, 1, 1),
+		const XMFLOAT2& texOffset = XMFLOAT2(0, 0)
 	) volatile
 	{
 		mat0.x = matIn._11;
@@ -623,7 +624,10 @@ struct Instance
 		userdata.y = subInstance;
 
 		userdata.z = wiMath::CompressColor(emissiveColor);
-		userdata.w = 0;
+		// GG: the object's own texture offset (ObjectComponent::gg_texOffset), each part a 16-bit fraction of a texture
+		float u = texOffset.x - floorf(texOffset.x);
+		float v = texOffset.y - floorf(texOffset.y);
+		userdata.w = (std::min((uint32_t)(u * 65536.0f), 65535u)) | (std::min((uint32_t)(v * 65536.0f), 65535u) << 16u);
 	}
 };
 struct InstancePrev
@@ -3555,10 +3559,10 @@ void RenderMeshes(
 				{
 				default:
 				case INSTANCETYPE_MATRIX_USERDATA:
-					((volatile Instance_MATRIX_USERDATA*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor);
+					((volatile Instance_MATRIX_USERDATA*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor, instance.gg_texOffset);
 					break;
 				case INSTANCETYPE_MATRIX_USERDATA_ATLAS:
-					((volatile Instance_MATRIX_USERDATA_ATLAS*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor);
+					((volatile Instance_MATRIX_USERDATA_ATLAS*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor, instance.gg_texOffset);
 				{
 					XMFLOAT4 lightMapMulAdd;
 					if (instance.lightmap.IsValid())
@@ -3586,7 +3590,7 @@ void RenderMeshes(
 				}
 					break;
 				case INSTANCETYPE_MATRIX_USERDATA_MATRIXPREV:
-					((volatile Instance_MATRIX_USERDATA_MATRIXPREV*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor);
+					((volatile Instance_MATRIX_USERDATA_MATRIXPREV*)instances.data)[instanceCount].instance.Create(worldMatrix, instance.color, dither, frustum_index, instance.emissiveColor, instance.gg_texOffset);
 					((volatile Instance_MATRIX_USERDATA_MATRIXPREV*)instances.data)[instanceCount].instancePrev.Create(instance.prev_transform_index >= 0 ? vis.scene->prev_transforms[instance.prev_transform_index].world_prev : IDENTITYMATRIX);
 					break;
 				}

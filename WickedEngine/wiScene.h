@@ -702,6 +702,9 @@ namespace wiScene
 		inline void SetRenderPreventAnyKindOfCulling(bool flag) { bPreventAnyKindOfCulling = flag; }
 		bool bDisableCollision = false;
 		inline void SetDisableCollision(bool flag) { bDisableCollision = flag; }
+		// GG: added to this object's texture coordinates on top of its material's offset, so one entity's part can
+		// scroll on its own while the model's material is shared (SetEntityLimbTextureScroll), fractions of a texture
+		XMFLOAT2 gg_texOffset = XMFLOAT2(0, 0);
 #endif
 
 		inline bool IsOccluded() const
