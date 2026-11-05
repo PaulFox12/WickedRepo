@@ -114,6 +114,11 @@ extern bool bReflectionsLowestLOD;
 // GG: the weapon subsets the last DRAWSCENE_COUNTWEAPONS draw met (one draw on one thread, the main camera's prepass)
 static int weaponsCounted = 0;
 
+// GG: a sun shadow caster smaller in every direction than this many of a cascade's shadow map texels is left out of that
+// cascade (0 keeps every caster); and the object-cascade pairs it left out last frame
+float gg_shadow_min_texels = 2.0f;
+unsigned int gg_shadow_texel_skipped = 0;
+
 #ifdef GGREDUCED
 struct TerrainChunkOcclusion
 {
@@ -7218,6 +7223,7 @@ void DrawShadowmaps(
 					break;
 				uint32_t slice = shadowCounter_2D;
 				shadowCounter_2D += CASCADE_COUNT;
+				gg_shadow_texel_skipped = 0;
 
 				std::array<SHCAM, CASCADE_COUNT> shcams;
 				CreateDirLightShadowCams(light, *vis.camera, shcams);
@@ -7238,6 +7244,16 @@ void DrawShadowmaps(
 						bool transparentShadowsRequested = false;
 						if ( cascade < 3 ) // skip wicked engine objects in last 2 cascades
 						{
+							// GG: the cascade's smallest caster, gg_shadow_min_texels of its shadow map's texels across (its ortho
+							// width over the map's); an object smaller in every direction casts nothing this cascade could show
+							float ggMinCasterSize = 0.0f;
+							if ( gg_shadow_min_texels > 0 )
+							{
+								XMFLOAT4X4 vpm;
+								XMStoreFloat4x4( &vpm, shcams[cascade].VP );
+								const float scaleX = std::sqrt( vpm._11 * vpm._11 + vpm._21 * vpm._21 + vpm._31 * vpm._31 );
+								if ( scaleX > 0 && SHADOWRES_2D > 0 ) ggMinCasterSize = gg_shadow_min_texels * ( 2.0f / scaleX ) / float( SHADOWRES_2D );
+							}
 							for (size_t i = 0; i < vis.scene->aabb_objects.GetCount(); ++i)
 							{
 								const AABB& aabb = vis.scene->aabb_objects[i];
@@ -7250,6 +7266,11 @@ void DrawShadowmaps(
 									float areaXZ = sizeX * sizeZ;
 									float areaYZ = sizeY * sizeZ;
 									if ( areaXY < 38000 && areaXZ < 38000 && areaYZ < 38000 ) continue; // about 5m x 5m
+								}
+								if ( ggMinCasterSize > 0 && std::max( aabb._max.x - aabb._min.x, std::max( aabb._max.y - aabb._min.y, aabb._max.z - aabb._min.z ) ) < ggMinCasterSize )
+								{
+									gg_shadow_texel_skipped++;
+									continue;
 								}
 								if ((aabb.layerMask & vis.layerMask) && shcams[cascade].frustum.CheckBoxFast(aabb))
 								{
