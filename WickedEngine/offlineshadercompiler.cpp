@@ -18,6 +18,7 @@ extern "C" void gpup_draw_bydistance(const wiScene::CameraComponent & camera, wi
 }
 extern "C" void tracer_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd) {}
 extern "C" void ripple_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd) {} // GG
+extern "C" void distantlight_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd) {} // GG
 
 //#endif
 

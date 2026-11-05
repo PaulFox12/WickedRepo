@@ -94,6 +94,11 @@ namespace Ripples
 {
 	extern "C" void ripple_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd);
 }
+// GG: the distant lights (GameGuru's DistantLightManager)
+namespace DistantLights
+{
+	extern "C" void distantlight_draw(const wiScene::CameraComponent& camera, wiGraphics::CommandList cmd);
+}
 
 #endif
 
@@ -2348,6 +2353,7 @@ void RenderPath3D::RenderTransparents(CommandList cmd, int mode) const
 		int gpuRange = WickedGpuRangeBegin(cmd, "Transparent - Particles"); // GG
 		Tracers::tracer_draw(wiScene::GetCamera(), cmd);
 		Ripples::ripple_draw(wiScene::GetCamera(), cmd); // GG
+		DistantLights::distantlight_draw(wiScene::GetCamera(), cmd); // GG
 
 		GPUParticles::gpup_draw_bydistance(wiScene::GetCamera(), cmd, 0.0f);
 
