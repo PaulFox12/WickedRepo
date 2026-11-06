@@ -5251,7 +5251,7 @@ OPTICK_EVENT();
 #endif
 	}
 
-	PickResult Pick(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, const Entity* pExclude, uint32_t excludeCount)
+	PickResult Pick(const RAY& ray, uint32_t renderTypeMask, uint32_t layerMask, const Scene& scene, const Entity* pExclude, uint32_t excludeCount, bool bSkipCollisionOff)
 	{
 		PickResult result;
 
@@ -5264,7 +5264,7 @@ OPTICK_EVENT();
 			
 			// GG: nearest box first, stopping at the first box that starts beyond the best hit
 			std::vector<PickCandidate> candidates;
-			PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, false, nullptr, 0, pExclude, excludeCount, candidates);
+			PickGatherCandidates(ray, dirNormalized, renderTypeMask, layerMask, scene, bSkipCollisionOff, nullptr, 0, pExclude, excludeCount, candidates);
 			uint32_t iResultIndex = UINT32_MAX;
 			for (const PickCandidate& candidate : candidates)
 			{
