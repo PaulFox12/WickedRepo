@@ -937,6 +937,7 @@ namespace wiScene
 		// Non-serialized attributes:
 		XMFLOAT3 position;
 		float range_global;
+		float gg_maxDistance = 0.0f; // GG: this light's own reach from the camera (its range added); 0 takes g_fLightMaxDistance
 		XMFLOAT3 direction;
 		XMFLOAT4 rotation;
 		XMFLOAT3 scale;

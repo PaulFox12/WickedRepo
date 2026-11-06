@@ -4162,12 +4162,17 @@ void UpdateVisibility(Visibility& vis, float maxApparentSize)
 			{
 #ifdef GGREDUCED
 				// GG: a point or spot light out of reach is left out as one out of view is, so it takes no entity slot: one
-				// with no range (a lamp off by day), or farther from the camera than g_fLightMaxDistance with its range
+				// with no range (a lamp off by day), or farther from the camera than its own reach (gg_maxDistance, else
+				// g_fLightMaxDistance) with its range
 				bool bInReach = true;
 				if (lightcomponent.type != LightComponent::DIRECTIONAL)
 				{
 					if (lightcomponent.GetRange() <= 1.0f) bInReach = false;
-					else if (g_fLightMaxDistance > 0.0f && wiMath::DistanceEstimated(lightcomponent.position, vis.camera->Eye) > g_fLightMaxDistance + lightcomponent.GetRange()) bInReach = false;
+					else
+					{
+						const float fReach = lightcomponent.gg_maxDistance > 0.0f ? lightcomponent.gg_maxDistance : g_fLightMaxDistance;
+						if (fReach > 0.0f && wiMath::DistanceEstimated(lightcomponent.position, vis.camera->Eye) > fReach + lightcomponent.GetRange()) bInReach = false;
+					}
 				}
 				if (bInReach && vis.frustum.CheckBoxFast(aabb))
 #else
