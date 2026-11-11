@@ -102,6 +102,8 @@ using namespace wiGraphics;
 
 namespace wiScene
 {
+	float gg_lod_hysteresis = 0.1f;
+	float gg_lod_pixel_budget = 1.0f;
 
 	XMFLOAT3 TransformComponent::GetPosition() const
 	{
@@ -3861,12 +3863,42 @@ OPTICK_EVENT();
 						int active_lod = object.forcelod > 0 ? std::min((int)object.forcelod - 1, (int)mesh->lodlevels) : 0;
 						if (object.forcelod == 0)
 						{
-							if (mesh->subsets.size() > 1 && mesh->lodlevels >= 1 && dist > (length_between_lod * 2))
+							// GG: the distances LOD 1 to 3 come in at: by the mesh's outline errors on screen (DBO block 506) at
+							// gg_lod_pixel_budget pixels, else the LOD Multiplier's steps
+							float comein[4] = { 0, length_between_lod * 2, length_between_lod * 3, length_between_lod * 4 };
+							const CameraComponent& cam = GetCamera();
+							if (mesh->gg_lod_error[0] > 0 && cam.height > 0 && cam.fov > 0)
+							{
+								const float scale = std::max(std::max(XMVectorGetX(XMVector3Length(W.r[0])), XMVectorGetX(XMVector3Length(W.r[1]))), XMVectorGetX(XMVector3Length(W.r[2])));
+								const float pixels_per_unit_at_1 = cam.height / (2.0f * std::tan(cam.fov * 0.5f));
+								const float budget = std::max(gg_lod_pixel_budget, 0.05f);
+								for (int k = 1; k <= 3; ++k)
+								{
+									const float err = mesh->gg_lod_error[k - 1] > 0 ? mesh->gg_lod_error[k - 1] : mesh->gg_lod_error[0];
+									comein[k] = std::max(comein[k - 1], err * scale * pixels_per_unit_at_1 / budget);
+								}
+							}
+							if (mesh->subsets.size() > 1 && mesh->lodlevels >= 1 && dist > comein[1])
 								active_lod = 1;
-							if (mesh->subsets.size() > 2 && mesh->lodlevels >= 2 && dist > (length_between_lod * 3))
+							if (mesh->subsets.size() > 2 && mesh->lodlevels >= 2 && dist > comein[2])
 								active_lod = 2;
-							if (mesh->subsets.size() > 3 && mesh->lodlevels >= 3 && dist > (length_between_lod * 4))
+							if (mesh->subsets.size() > 3 && mesh->lodlevels >= 3 && dist > comein[3])
 								active_lod = 3;
+							// GG: hysteresis: a finer LOD only once nearer than (1 - gg_lod_hysteresis) of where the coarser came in,
+							// so an object on a boundary doesn't flick between two
+							const int current = (int)object.activelod;
+							if (object.gg_lod_chosen && active_lod < current && current <= 3)
+							{
+								int keep = current;
+								while (keep > active_lod && dist < comein[keep] * (1.0f - gg_lod_hysteresis))
+									keep--;
+								active_lod = keep;
+							}
+							object.gg_lod_chosen = true;
+						}
+						else
+						{
+							object.gg_lod_chosen = false;
 						}
 						object.activelod = active_lod;
 

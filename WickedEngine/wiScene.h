@@ -34,6 +34,10 @@ extern void (*g_pfnWickedMeshInUseRemove)(wiECS::Entity mesh, wiECS::Entity obje
 
 namespace wiScene
 {
+	// GG: LOD transitions (wiScene.cpp): a finer LOD comes back only nearer than (1 - gg_lod_hysteresis) of where the coarser
+	// came in; a mesh with outline errors takes each LOD where its error reaches gg_lod_pixel_budget pixels on screen
+	extern float gg_lod_hysteresis;
+	extern float gg_lod_pixel_budget;
 	struct NameComponent
 	{
 		std::string name;
@@ -380,6 +384,9 @@ namespace wiScene
 
 		uint32_t lodlevels = 0;
 		bool activelodlevels = true;
+		// GG: each LOD's worst outline error against LOD 0 in the model's units (DBO block 506), LOD 1 to 3; 0 none, when the
+		// LOD steps by distance (the LOD Multiplier). With it a LOD comes in where its error reaches gg_lod_pixel_budget pixels
+		float gg_lod_error[3] = { 0, 0, 0 };
 
 		float tessellationFactor = 0.0f;
 		wiECS::Entity armatureID = wiECS::INVALID_ENTITY;
@@ -686,6 +693,7 @@ namespace wiScene
 		bool bPrev_In_Frustum = true;
 		uint32_t activelod = 0;
 		uint32_t forcelod = 0; // GG: the LOD forced plus one, 0 to choose by distance
+		bool gg_lod_chosen = false; // GG: a LOD has been chosen by distance (the hysteresis needs the last one)
 
 		// occlusion result history bitfield (32 bit->32 frame history)
 		uint32_t occlusionHistory = ~0;
