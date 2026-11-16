@@ -162,6 +162,15 @@ namespace GGTrees
 	extern "C" void GGTrees_Draw_EnvProbe( const SPHERE* culler, const Frustum* frusta, uint32_t frustum_count, wiGraphics::CommandList cmd );
 	extern "C" void __GGTrees_Draw_EnvProbe_EMPTY( const SPHERE* culler, const Frustum* frusta, uint32_t frustum_count, wiGraphics::CommandList cmd ) {}
 	#pragma comment(linker, "/alternatename:GGTrees_Draw_EnvProbe=__GGTrees_Draw_EnvProbe_EMPTY")
+
+	// GG: the trees in a spot light's shadow or one face of a point light's (the camera constants, viewport and render pass
+	// set), and whether any stands in that view, so a light with no other caster still renders its shadow
+	extern "C" void GGTrees_Draw_ShadowMapLocal( const Frustum* frustum, wiGraphics::CommandList cmd );
+	extern "C" void __GGTrees_Draw_ShadowMapLocal_EMPTY( const Frustum* frustum, wiGraphics::CommandList cmd ) {}
+	#pragma comment(linker, "/alternatename:GGTrees_Draw_ShadowMapLocal=__GGTrees_Draw_ShadowMapLocal_EMPTY")
+	extern "C" bool GGTrees_Has_ShadowMapLocal( const Frustum* frustum );
+	extern "C" bool __GGTrees_Has_ShadowMapLocal_EMPTY( const Frustum* frustum ) { return false; }
+	#pragma comment(linker, "/alternatename:GGTrees_Has_ShadowMapLocal=__GGTrees_Has_ShadowMapLocal_EMPTY")
 }
 
 namespace GGGrass
@@ -304,6 +313,7 @@ Texture shadowMapArray_Transparent_Cube;
 std::vector<RenderPass> renderpasses_shadow2D;
 std::vector<RenderPass> renderpasses_spot_shadow2D;
 std::vector<RenderPass> renderpasses_shadowCube;
+std::vector<RenderPass> renderpasses_shadowCubeFace; // GG: one face of a point light's cube, kept as its pass left it, for the trees
 
 std::vector<std::pair<XMFLOAT4X4, XMFLOAT4>> renderableBoxes;
 std::vector<std::pair<SPHERE, XMFLOAT4>> renderableSpheres;
@@ -7155,6 +7165,25 @@ void SetShadowPropsCube(int resolution, int count)
 
 			device->CreateRenderPass(&renderpassdesc, &renderpasses_shadowCube[subresource_index]);
 		}
+
+		// GG: a pass a face, which keeps what the light's own pass drew there: GameGuru's trees are drawn a face at a time
+		renderpasses_shadowCubeFace.resize(SHADOWCOUNT_CUBE * 6);
+		for (uint32_t i = 0; i < SHADOWCOUNT_CUBE * 6; ++i)
+		{
+			RenderPassDesc renderpassdesc;
+			renderpassdesc.attachments.push_back(
+				RenderPassAttachment::DepthStencil(
+					&shadowMapArray_Cube,
+					RenderPassAttachment::LOADOP_LOAD,
+					RenderPassAttachment::STOREOP_STORE,
+					IMAGE_LAYOUT_SHADER_RESOURCE,
+					IMAGE_LAYOUT_DEPTHSTENCIL,
+					IMAGE_LAYOUT_SHADER_RESOURCE
+				)
+			);
+			renderpassdesc.attachments.back().subresource = device->CreateSubresource(&shadowMapArray_Cube, DSV, i, 1, 0, 1);
+			device->CreateRenderPass(&renderpassdesc, &renderpasses_shadowCubeFace[i]);
+		}
 	}
 
 }
@@ -7433,7 +7462,9 @@ void DrawShadowmaps(
 						}
 					}
 				}
-				if (!renderQueue.empty())
+				// GG: GameGuru's trees cast too, so a light with only trees in its view renders its shadow as well
+				const bool ggTrees = GGTrees::GGTrees_Has_ShadowMapLocal(&shcam.frustum);
+				if (!renderQueue.empty() || ggTrees)
 				{
 					//PE: Way faster shadow render, using special sorting to max batch and min. overdraw.
 					renderQueue.sort(RenderQueue::SORT_FRONT_TO_BACK);
@@ -7452,10 +7483,17 @@ void DrawShadowmaps(
 					device->BindViewports(1, &vp, cmd);
 
 					device->RenderPassBegin(&renderpasses_spot_shadow2D[slice], cmd);
-					RenderMeshes(vis, renderQueue, RENDERPASS_SHADOW, RENDERTYPE_OPAQUE, cmd);
-					if (GetTransparentShadowsEnabled() && transparentShadowsRequested)
+					if (!renderQueue.empty())
 					{
-						RenderMeshes(vis, renderQueue, RENDERPASS_SHADOW, RENDERTYPE_TRANSPARENT | RENDERTYPE_WATER, cmd);
+						RenderMeshes(vis, renderQueue, RENDERPASS_SHADOW, RENDERTYPE_OPAQUE, cmd);
+						if (GetTransparentShadowsEnabled() && transparentShadowsRequested)
+						{
+							RenderMeshes(vis, renderQueue, RENDERPASS_SHADOW, RENDERTYPE_TRANSPARENT | RENDERTYPE_WATER, cmd);
+						}
+					}
+					if (ggTrees)
+					{
+						GGTrees::GGTrees_Draw_ShadowMapLocal(&shcam.frustum, cmd);
 					}
 					device->RenderPassEnd(cmd);
 
@@ -7586,7 +7624,25 @@ void DrawShadowmaps(
 						}
 					}
 				}
-				if (!renderQueue.empty())
+				const float zNearP = 0.1f;
+				const float zFarP = std::max(1.0f, light.GetRange());
+				SHCAM cameras[] = {
+					SHCAM(light.position, XMFLOAT4(0.5f, -0.5f, -0.5f, -0.5f), zNearP, zFarP, XM_PIDIV2), //+x
+					SHCAM(light.position, XMFLOAT4(0.5f, 0.5f, 0.5f, -0.5f), zNearP, zFarP, XM_PIDIV2), //-x
+					SHCAM(light.position, XMFLOAT4(1, 0, 0, -0), zNearP, zFarP, XM_PIDIV2), //+y
+					SHCAM(light.position, XMFLOAT4(0, 0, 0, -1), zNearP, zFarP, XM_PIDIV2), //-y
+					SHCAM(light.position, XMFLOAT4(0.707f, 0, 0, -0.707f), zNearP, zFarP, XM_PIDIV2), //+z
+					SHCAM(light.position, XMFLOAT4(0, 0.707f, 0.707f, 0), zNearP, zFarP, XM_PIDIV2), //-z
+				};
+				// GG: GameGuru's trees cast too, into each face the camera sees, so a light with only trees in range renders as well
+				bool ggTreeFace[arraysize(cameras)] = {};
+				bool ggTrees = false;
+				for (uint32_t face = 0; face < arraysize(cameras); ++face)
+				{
+					ggTreeFace[face] = cam_frustum.Intersects(cameras[face].boundingfrustum) && GGTrees::GGTrees_Has_ShadowMapLocal(&cameras[face].frustum);
+					ggTrees = ggTrees || ggTreeFace[face];
+				}
+				if (!renderQueue.empty() || ggTrees)
 				{
 					//PE: Need more work.
 					//if (bEnableDelayPointShadow)
@@ -7608,16 +7664,6 @@ void DrawShadowmaps(
 					device->BindConstantBuffer(VS, &constantBuffers[CBTYPE_MISC], CB_GETBINDSLOT(MiscCB), cmd);
 					device->BindConstantBuffer(PS, &constantBuffers[CBTYPE_MISC], CB_GETBINDSLOT(MiscCB), cmd);
 
-					const float zNearP = 0.1f;
-					const float zFarP = std::max(1.0f, light.GetRange());
-					SHCAM cameras[] = {
-						SHCAM(light.position, XMFLOAT4(0.5f, -0.5f, -0.5f, -0.5f), zNearP, zFarP, XM_PIDIV2), //+x
-						SHCAM(light.position, XMFLOAT4(0.5f, 0.5f, 0.5f, -0.5f), zNearP, zFarP, XM_PIDIV2), //-x
-						SHCAM(light.position, XMFLOAT4(1, 0, 0, -0), zNearP, zFarP, XM_PIDIV2), //+y
-						SHCAM(light.position, XMFLOAT4(0, 0, 0, -1), zNearP, zFarP, XM_PIDIV2), //-y
-						SHCAM(light.position, XMFLOAT4(0.707f, 0, 0, -0.707f), zNearP, zFarP, XM_PIDIV2), //+z
-						SHCAM(light.position, XMFLOAT4(0, 0.707f, 0.707f, 0), zNearP, zFarP, XM_PIDIV2), //-z
-					};
 					Frustum frusta[arraysize(cameras)];
 					uint32_t frustum_count = 0;
 
@@ -7645,12 +7691,31 @@ void DrawShadowmaps(
 					device->BindViewports(1, &vp, cmd);
 					//device->RenderPassBegin(&renderpasses_shadowCube[slice], cmd);
 					device->RenderPassBegin(&renderpasses_shadowCube[lastsliceused], cmd);
-					RenderMeshes(vis, renderQueue, RENDERPASS_SHADOWCUBE, RENDERTYPE_OPAQUE, cmd, false, frusta, frustum_count);
-					if (GetTransparentShadowsEnabled() && transparentShadowsRequested)
+					if (!renderQueue.empty())
 					{
-						RenderMeshes(vis, renderQueue, RENDERPASS_SHADOWCUBE, RENDERTYPE_TRANSPARENT | RENDERTYPE_WATER, cmd, false, frusta, frustum_count);
+						RenderMeshes(vis, renderQueue, RENDERPASS_SHADOWCUBE, RENDERTYPE_OPAQUE, cmd, false, frusta, frustum_count);
+						if (GetTransparentShadowsEnabled() && transparentShadowsRequested)
+						{
+							RenderMeshes(vis, renderQueue, RENDERPASS_SHADOWCUBE, RENDERTYPE_TRANSPARENT | RENDERTYPE_WATER, cmd, false, frusta, frustum_count);
+						}
 					}
 					device->RenderPassEnd(cmd);
+
+					// GG: the trees, a face at a time, over what the light's pass drew there
+					if (ggTrees && (size_t)lastsliceused * 6 + 6 <= renderpasses_shadowCubeFace.size())
+					{
+						for (uint32_t face = 0; face < arraysize(cameras); ++face)
+						{
+							if (!ggTreeFace[face])
+								continue;
+							CameraCB cbFace;
+							XMStoreFloat4x4(&cbFace.g_xCamera_VP, cameras[face].VP);
+							device->UpdateBuffer(&constantBuffers[CBTYPE_CAMERA], &cbFace, cmd);
+							device->RenderPassBegin(&renderpasses_shadowCubeFace[lastsliceused * 6 + face], cmd);
+							GGTrees::GGTrees_Draw_ShadowMapLocal(&cameras[face].frustum, cmd);
+							device->RenderPassEnd(cmd);
+						}
+					}
 
 					GetRenderFrameAllocator(cmd).free(sizeof(RenderBatch) * renderQueue.batchCount);
 					iRenderedPointShadows++;
