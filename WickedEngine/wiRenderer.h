@@ -295,6 +295,10 @@ namespace wiRenderer
 	float GetLensFlareLightHue();
 	float GetLensFlareLightBrightness();
 	void SetLensFlareEnergyReference(float energy);
+	// GG: the sun's disc alone: its brightness times the sun's light (1 as before) and a tint over the sun's colour, 0-1 a
+	// channel; the sun's light, the sky and the probes stay as they are
+	void SetSunDisc(float gain, float red, float green, float blue);
+	void GetSunDisc(float& gain, float& red, float& green, float& blue);
 	void DrawLensFlares(
 		const Visibility& vis,
 		const wiGraphics::Texture& depthbuffer,

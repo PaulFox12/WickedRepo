@@ -4546,6 +4546,23 @@ void UpdateVisibility(Visibility& vis, float maxApparentSize)
 	wiProfiler::EndRange(range); // Frustum Culling
 }
 //#pragma optimize("", on)
+// GG: the sun's disc alone (skyAtmosphere.hlsli GetSunLuminance): its brightness times the sun's light, 1 as before, and a
+// tint over the sun's colour packed 8 bits a channel, white as before
+static float g_fSunDiscGain = 1.0f;
+static uint32_t g_uSunDiscTint = 0xFFFFFFFF;
+void SetSunDisc(float gain, float red, float green, float blue)
+{
+	auto channel = [](float v) { return (uint32_t)(std::min(std::max(v, 0.0f), 1.0f) * 255.0f + 0.5f); };
+	g_fSunDiscGain = std::max(0.0f, gain);
+	g_uSunDiscTint = channel(red) | (channel(green) << 8u) | (channel(blue) << 16u) | (255u << 24u);
+}
+void GetSunDisc(float& gain, float& red, float& green, float& blue)
+{
+	gain = g_fSunDiscGain;
+	red = (g_uSunDiscTint & 0xFF) / 255.0f;
+	green = ((g_uSunDiscTint >> 8) & 0xFF) / 255.0f;
+	blue = ((g_uSunDiscTint >> 16) & 0xFF) / 255.0f;
+}
 void UpdatePerFrameData(
 	Scene& scene,
 	const Visibility& vis,
@@ -4976,6 +4993,8 @@ void UpdatePerFrameData(
 	}
 
 	frameCB.g_xFrame_Atmosphere = vis.scene->weather.atmosphereParameters;
+	frameCB.g_xFrame_Atmosphere.gg_sun_disc_gain = g_fSunDiscGain; // GG: the sun's disc alone (SetSunDisc)
+	frameCB.g_xFrame_Atmosphere.gg_sun_disc_tint = g_uSunDiscTint;
 	frameCB.g_xFrame_VolumetricClouds = vis.scene->weather.volumetricCloudParameters;
 
 

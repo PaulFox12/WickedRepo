@@ -414,19 +414,34 @@ float3 GetSunLuminance(float3 worldPosition, float3 worldDirection, float3 sunDi
 
 	float VdotL = dot(worldDirection, normalize(sunDirection)); // weird... the sun disc shrinks near the horizon if we don't normalize sun direction
 	
+	// GG: the sun drawn as a disc brightest in its middle (darker toward its rim, faded over its outer third) inside a glow
+	// that falls with the square of the angle from it, as the sky's own aureole round the sun does, both times the disc's
+	// gain and tint (Tab Tab's Sun Disc, SetSunDisc). The glow just outside the rim is about a sixth of the disc's middle,
+	// so a bright disc's rim melts into its glare instead of reading as a flat plate (the user, 2026-11-23: "even at gain
+	// 30 you can see its just a flat disc"); at gain 1 it is near the old flat disc. The sun's light, the sky and the
+	// probes (captured without the disc) are as they were. Out to GG_SUN_GLOW_REACH disc radii (24 degrees), faded to 0
+	static const float GG_SUN_GLOW = 0.15;
+	static const float GG_SUN_GLOW_REACH = 20.0;
+	static const float GG_SUN_LIMB = 0.4;
 	float3 retval = 0;
-	if (VdotL > sunCosHalfApexAngle)
+	const float u = acos(clamp(VdotL, -1.0, 1.0)) / sunHalfApexAngleRadian; // 1 at the disc's rim
+	[branch]
+	if (u < GG_SUN_GLOW_REACH)
 	{
 		float t = RaySphereIntersectNearest(worldPosition, worldDirection, float3(0.0f, 0.0f, 0.0f), atmosphere.bottomRadius);
 		if (t < 0.0f) // no intersection
 		{
 			const float3 atmosphereTransmittance = GetAtmosphereTransmittance(worldPosition, worldDirection, atmosphere, transmittanceLutTexture);
-
-            // Edge fade
-			const float halfCosHalfApex = sunCosHalfApexAngle + (1.0f - sunCosHalfApexAngle) * 0.25; // Start fading when at 75% distance from light disk center
-			const float weight = 1.0 - saturate((halfCosHalfApex - VdotL) / (halfCosHalfApex - sunCosHalfApexAngle));
-            
-			retval = atmosphereTransmittance * weight * sunIlluminance;
+			float disc = 0;
+			if (u < 1)
+			{
+				const float mu = sqrt(1 - u * u);
+				disc = (1 - GG_SUN_LIMB * (1 - mu)) * smoothstep(1.0, 0.67, u);
+			}
+			const float glow = GG_SUN_GLOW / max(u * u, 1.0) * saturate((GG_SUN_GLOW_REACH - u) / (GG_SUN_GLOW_REACH * 0.5));
+			const uint tint = atmosphere.gg_sun_disc_tint;
+			const float3 tintColor = tint != 0 ? float3(tint & 0xFF, (tint >> 8) & 0xFF, (tint >> 16) & 0xFF) / 255.0f : float3(1, 1, 1);
+			retval = atmosphereTransmittance * sunIlluminance * (disc + glow) * atmosphere.gg_sun_disc_gain * tintColor;
 		}
 	}
     

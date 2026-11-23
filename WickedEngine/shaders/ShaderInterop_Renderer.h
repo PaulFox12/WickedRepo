@@ -287,7 +287,11 @@ static const int impostorCaptureAngles = 36;
 
 struct AtmosphereParameters
 {
-		float2 padding0;
+	// GG: the sun's disc alone, in what was padding0 (nothing else moves), set every frame by the renderer
+	// (wiRenderer::SetSunDisc): its brightness times the sun's light, 1 as before, and a tint over the sun's colour packed
+	// 8 bits a channel (0 white)
+	float gg_sun_disc_gain;
+	uint gg_sun_disc_tint;
 	// Radius of the planet (center to ground)
 	float bottomRadius;
 	// Maximum considered atmosphere height (center to atmosphere top)
