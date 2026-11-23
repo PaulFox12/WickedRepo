@@ -329,38 +329,41 @@ namespace wiResourceManager
 
 					if (flags & IMPORT_COLORGRADINGLUT)
 					{
+						// GG: a strip of N tiles of N x N (N 16, 32 or 64: 256 x 16, 1024 x 32, 4096 x 64), not only 16; a 16 step
+						// table bends a smooth gradient at each step, which shows as rings in a bright sky
+						const uint32_t lutSize = desc.Height;
 						if (desc.type != TextureDesc::TEXTURE_2D ||
-							desc.Width != 256 ||
-							desc.Height != 16)
+							(lutSize != 16 && lutSize != 32 && lutSize != 64) ||
+							desc.Width != lutSize * lutSize)
 						{
-							wiHelper::messageBox("The Dimensions must be 256 x 16 for color grading LUT!", "Error");
+							wiHelper::messageBox("The Dimensions must be 256 x 16, 1024 x 32 or 4096 x 64 for color grading LUT!", "Error");
 						}
 						else
 						{
-							uint32_t data[16 * 16 * 16];
+							std::vector<uint32_t> data(lutSize * lutSize * lutSize);
 							int pixel = 0;
-							for (int z = 0; z < 16; ++z)
+							for (uint32_t z = 0; z < lutSize; ++z)
 							{
-								for (int y = 0; y < 16; ++y)
+								for (uint32_t y = 0; y < lutSize; ++y)
 								{
-									for (int x = 0; x < 16; ++x)
+									for (uint32_t x = 0; x < lutSize; ++x)
 									{
-										int coord = x + y * 256 + z * 16;
+										uint32_t coord = x + y * lutSize * lutSize + z * lutSize;
 										data[pixel++] = ((uint32_t*)rgb)[coord];
 									}
 								}
 							}
 
 							desc.type = TextureDesc::TEXTURE_3D;
-							desc.Width = 16;
-							desc.Height = 16;
-							desc.Depth = 16;
+							desc.Width = lutSize;
+							desc.Height = lutSize;
+							desc.Depth = lutSize;
 							desc.Format = FORMAT_R8G8B8A8_UNORM;
 							desc.BindFlags = BIND_SHADER_RESOURCE;
 							SubresourceData InitData;
-							InitData.pSysMem = data;
-							InitData.SysMemPitch = 16 * sizeof(uint32_t);
-							InitData.SysMemSlicePitch = 16 * InitData.SysMemPitch;
+							InitData.pSysMem = data.data();
+							InitData.SysMemPitch = lutSize * sizeof(uint32_t);
+							InitData.SysMemSlicePitch = lutSize * InitData.SysMemPitch;
 							success = device->CreateTexture(&desc, &InitData, &resource->texture);
 							device->SetName(&resource->texture, name.c_str());
 						}
