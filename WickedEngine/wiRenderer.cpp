@@ -119,6 +119,11 @@ static int weaponsCounted = 0;
 float gg_shadow_min_texels = 2.0f;
 unsigned int gg_shadow_texel_skipped = 0;
 
+// GG: the sun's light shafts (Lua SetLightShaftStrength): their brightness and their reach toward the sun against the stock
+// look, both 1 as before; the reach stretches the radial blur's march, so the streaks lengthen with the same total weight
+float gg_lightshaft_gain = 1.0f;
+float gg_lightshaft_length = 1.0f;
+
 #ifdef GGREDUCED
 struct TerrainChunkOcclusion
 {
@@ -13116,10 +13121,10 @@ void Postprocess_LightShafts(
 	cb.xPPResolution.y = desc.Height;
 	cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
 	cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
-	cb.xPPParams0.x = 0.65f;	// density
+	cb.xPPParams0.x = 0.65f * gg_lightshaft_length;	// density (GG: times the shafts' reach)
 	cb.xPPParams0.y = 0.25f;	// weight
 	cb.xPPParams0.z = 0.945f;	// decay
-	cb.xPPParams0.w = 0.2f;		// exposure
+	cb.xPPParams0.w = 0.2f * gg_lightshaft_gain;	// exposure (GG: times the shafts' brightness)
 	cb.xPPParams1.x = center.x;
 	cb.xPPParams1.y = center.y;
 	device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
